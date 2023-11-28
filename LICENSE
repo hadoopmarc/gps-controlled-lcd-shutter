@@ -672,3 +672,12 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
+
+
+===========================================================================
+    Work excluded from the GNU GENERAL PUBLIC LICENSE Version 3
+===========================================================================
+
+The file doc/image/allsky-20200922-3h53m30sUT.png is courtesy of the
+Astronomical Institute of the Academy of Sciences of the Czech Republic
+and any further use should include this reference.
