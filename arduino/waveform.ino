@@ -5,7 +5,7 @@ int timeCurRel = 0;
 int pinVal = 127;
 int lastPolarity = -1;
 int curPolarity = 0;
-int frequency = 32;
+int frequency = 16;
 
 // Make sure to match these to your physical set-up!
 int gpsPin = 2;
