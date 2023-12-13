@@ -40,7 +40,7 @@ int getDigitalFromMillis(int relMillis)
     if (relMillis < 1000/16) {
         return 0;
     }
-    float periodMillis = 1000 / frequency;
+    float periodMillis = 1000.0 / frequency;
     int nCycles = relMillis / periodMillis;
     float normMillis = relMillis - nCycles * periodMillis;
     if (normMillis < periodMillis / 2) {
