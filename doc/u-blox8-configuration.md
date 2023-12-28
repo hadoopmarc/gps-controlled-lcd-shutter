@@ -13,19 +13,19 @@ The [U-blox8 configuration guide](https://content.u-blox.com/sites/default/files
 
 | ubx key           | ubx value 1 | ubx value 2 | comment |
 |: ------------     | ----------- | ----------- |: ------ |
-| tpIdx             | 0           | 1           | TIMEPULSE vs TIMEPULSE2
-| freqPeriod        | 1 s         | 1 Hz        | unit depends on isFreq
-| pulseLenRatio     | 100 ms      | 0           | unit depends on isLength
-| freqPeriodLock    |             | 10 MHz      | depends on lockedOtherSet
-| pulseLenRatioLock |             | 50%         | depends on lockedOtherSet
-| active            | 1           | 1           | configuration is active
-| lockGnssFreq      | 1           | 1           | most precise but probably irrelevant
-| lockedOtherSet    | 0           | 1           | for recognizing no-lock situation
-| isFreq            | 0           | 1           | unit for freqPeriod(Lock)
-| isLength          | 1           | 0           | unit for pulsLenRatio(Lock)
-| alignToTow        | 1           | 1           | most precise but probably irrelevant
-| polarity          | 1           | 1           | 1 = rising edge
-| gridUtcGnss       | 1           | 1           | should be 0 (UTC) for astronomy
+| tpIdx             | 0           | 1           | TIMEPULSE vs TIMEPULSE2 |
+| freqPeriod        | 1 s         | 1 Hz        | unit depends on isFreq |
+| pulseLenRatio     | 100 ms      | 0           | unit depends on isLength |
+| freqPeriodLock    |             | 10 MHz      | depends on lockedOtherSet |
+| pulseLenRatioLock |             | 50%         | depends on lockedOtherSet |
+| active            | 1           | 1           | configuration is active |
+| lockGnssFreq      | 1           | 1           | most precise but probably irrelevant |
+| lockedOtherSet    | 0           | 1           | for recognizing no-lock situation |
+| isFreq            | 0           | 1           | unit for freqPeriod(Lock) |
+| isLength          | 1           | 0           | unit for pulsLenRatio(Lock) |
+| alignToTow        | 1           | 1           | most precise but probably irrelevant |
+| polarity          | 1           | 1           | 1 = rising edge |
+| gridUtcGnss       | 1           | 1           | should be 0 (UTC) for astronomy |
 
 The lockedOtherSet allows a no-lock situation to be made visible through the frequency and pulse length ratio of the timepulse. This seems useful for the LCD application.
 
@@ -33,19 +33,19 @@ The lockedOtherSet allows a no-lock situation to be made visible through the fre
 
 | ubx key           | TIMEPULSE   | TIMEPULSE2  | comment |
 |: ------------     | ----------- | ----------- |: ------ |
-| tpIdx             | 0           | 1           | TIMEPULSE vs TIMEPULSE2
-| freqPeriod        | 1 Hz        | 16 Hz       | unit depends on isFreq
-| pulseLenRatio     | 50000       | 15625       | unit depends on isLength
-| freqPeriodLock    | 1 Hz        | 16 Hz       | depends on lockedOtherSet
-| pulseLenRatioLock | 50000       | 31250       | depends on lockedOtherSet
-| active            | 1           | 1           | configuration is active
-| lockGnssFreq      | 1           | 1           | most precise but probably irrelevant
-| lockedOtherSet    | 0           | 1           | for recognizing no-lock situation
-| isFreq            | 1           | 1           | unit for freqPeriod(Lock)
-| isLength          | 1           | 1           | unit for pulsLenRatio(Lock)
-| alignToTow        | 1           | 1           | most precise but probably irrelevant
-| polarity          | 1           | 1           | 1 = rising edge
-| gridUtcGnss       | 0           | 0           | should be 0 (UTC) for astronomy
+| tpIdx             | 0           | 1           | TIMEPULSE vs TIMEPULSE2 |
+| freqPeriod        | 1 Hz        | 16 Hz       | unit depends on isFreq |
+| pulseLenRatio     | 50000       | 15625       | unit depends on isLength |
+| freqPeriodLock    | 1 Hz        | 16 Hz       | depends on lockedOtherSet |
+| pulseLenRatioLock | 50000       | 31250       | depends on lockedOtherSet |
+| active            | 1           | 1           | configuration is active |
+| lockGnssFreq      | 1           | 1           | most precise but probably irrelevant |
+| lockedOtherSet    | 0           | 1           | for recognizing no-lock situation |
+| isFreq            | 1           | 1           | unit for freqPeriod(Lock) |
+| isLength          | 1           | 1           | unit for pulsLenRatio(Lock) |
+| alignToTow        | 1           | 1           | most precise but probably irrelevant |
+| polarity          | 1           | 1           | 1 = rising edge |
+| gridUtcGnss       | 0           | 0           | should be 0 (UTC) for astronomy |
 
 Other fields keep their default value.
 isLength = 0 does not seem to work, so rather pulse duration in microseconds are provided.
