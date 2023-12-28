@@ -12,7 +12,7 @@ The pygpsclient is only used for setting the ubx configuration variables, but is
 The [U-blox8 configuration guide](https://content.u-blox.com/sites/default/files/products/documents/u-blox8-M8_ReceiverDescrProtSpec_UBX-13003221.pdf) gives the following examples for configuring the TIMEPULSE/TIMEPULSE2 outputs of the NEO-M8T module with the ubx protocol (section 19.5, page 74):
 
 | ubx key           | ubx value 1 | ubx value 2 | comment |
-|: ------------     | ----------- | ----------- |: ------ |
+| :------------     | ----------- | ----------- | :------ |
 | tpIdx             | 0           | 1           | TIMEPULSE vs TIMEPULSE2 |
 | freqPeriod        | 1 s         | 1 Hz        | unit depends on isFreq |
 | pulseLenRatio     | 100 ms      | 0           | unit depends on isLength |
@@ -32,7 +32,7 @@ The lockedOtherSet allows a no-lock situation to be made visible through the fre
 ## Configuration for LCD shutter
 
 | ubx key           | TIMEPULSE   | TIMEPULSE2  | comment |
-|: ------------     | ----------- | ----------- |: ------ |
+| :------------     | ----------- | ----------- | :------ |
 | tpIdx             | 0           | 1           | TIMEPULSE vs TIMEPULSE2 |
 | freqPeriod        | 1 Hz        | 16 Hz       | unit depends on isFreq |
 | pulseLenRatio     | 50000       | 15625       | unit depends on isLength |
