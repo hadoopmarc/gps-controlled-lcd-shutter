@@ -35,7 +35,7 @@ The lockedOtherSet allows a no-lock situation to be made visible through the fre
 | :------------     | ----------- | ----------- | :------ |
 | tpIdx             | 0           | 1           | TIMEPULSE vs TIMEPULSE2 |
 | freqPeriod        | 1 Hz        | 16 Hz       | unit depends on isFreq |
-| pulseLenRatio     | 50000       | 15625       | unit depends on isLength |
+| pulseLenRatio     | 50000       | 46875       | unit depends on isLength |
 | freqPeriodLock    | 1 Hz        | 16 Hz       | depends on lockedOtherSet |
 | pulseLenRatioLock | 50000       | 31250       | depends on lockedOtherSet |
 | active            | 1           | 1           | configuration is active |
