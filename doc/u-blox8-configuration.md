@@ -3,10 +3,10 @@
 ## Setup
 - RPI400 with Raspbian 11 (bullseye)
 - pygpsclient-1.4.6 on python-3.9.2
-- USB/UART programmer
+- USB/UART programmer module
 - U-blox NEO-M8T module
 
-The pygpsclient is only used for setting the ubx configuration variables, but is also useful to check the satellite fix on a specific location. Note that on an RPI400 the client cannot keep up with showing NMEA messages in the console and the displayed UTC time starts lagging. This does not occur when the console is disabled in the view settings.
+The pygpsclient is only used for setting the UBX configuration variables, but is also useful to check the satellite fix on a specific geographic location. Note that on an RPI400 the client cannot keep up with showing NMEA messages in the console and the displayed UTC time starts lagging. This does not occur when the console is disabled in the view settings or the preset command "CFG-MSG - Turn ON minimum NMEA msgs" is issued from the UBX configuration window.
 
 ## Available configuration examples
 The [U-blox8 configuration guide](https://content.u-blox.com/sites/default/files/products/documents/u-blox8-M8_ReceiverDescrProtSpec_UBX-13003221.pdf) gives the following examples for configuring the TIMEPULSE/TIMEPULSE2 outputs of the NEO-M8T module with the ubx protocol (section 19.5, page 74):
@@ -49,6 +49,9 @@ The lockedOtherSet allows a no-lock situation to be made visible through the fre
 
 Other fields keep their default value.
 isLength = 0 does not seem to work, so rather pulse duration in microseconds are provided.
+
+**NB**: after entering the configurations above in the center of the UBX Configuration window, an additional command "CFG-MSG - Save configuration to non-volatile memory" has to be issued from the preset commands in the bottom-right corner, for obvious reasons.
+
 
 
 
