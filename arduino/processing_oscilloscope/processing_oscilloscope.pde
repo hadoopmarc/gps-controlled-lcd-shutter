@@ -47,7 +47,8 @@ void setup()
 }
 
 int getY(int val) {
-  return (int)(height - val / 1023.0f * (height - 1));
+  int padding = 10;
+  return (int)(height - padding / 2 - val / 1023.0f * (height - padding)) ;
 }
 
 // Arduino UNO R3 takes about 8000 analog measurements per second.
@@ -90,7 +91,7 @@ void drawLines() {
   
   int displayWidth = (int) (width / zoom);
   
-  int k = values0.length - displayWidth;
+  int k = width - displayWidth;
   
   int xa = 0;
   int ya0 = getY(values0[k]);
