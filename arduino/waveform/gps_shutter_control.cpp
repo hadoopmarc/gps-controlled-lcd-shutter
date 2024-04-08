@@ -99,8 +99,8 @@ void setup_shutter_control()
   pinMode(PIN_POS, OUTPUT);
 
   // TIMER1 configs for creating a continuous sequence of ISR interrupts
+  // TIMER1 is available if the Arduino servo library is not required
   // TIMER0 is occupied by Arduino core for the millis()/micros() functions
-  // TIMER1 can be used if the Arduino servo library is not required
   TCCR1A = 0x00;                       // reset TIMER1 control register
   TCCR1B = (1<<CS10) | (1<<CS11);      // set the prescalar at 64 (OCR1A ticks of 4 microsecond)
   TCCR1B |= (1<<WGM12);                // set CTC mode (Clear Timer on Compare)
@@ -115,45 +115,66 @@ void setup_shutter_control()
 void run_shutter_control()
 {
   char s[90];
-  unsigned long entryMicros = micros();  // Temporary during development
+  bool avoidance = false;
+//  unsigned long entryMicros = micros();  // Temporary during development
 
   if (!gpsHit) {
     return;
   }
-  long phaseDiff = micros() - prevGpsMicros - 1000000;
-  if (abs(phaseDiff) < 5000) {   // 0.5% tolerance of Arduino ceramic resonator
-    iGpsPulse ++;   // Overflow takes 136 years
+  long phaseDiff = lastGpsMicros - prevGpsMicros - 1000000;  // Uncalibrated measurement
+  if (abs(phaseDiff) < 5000) {                               // 0.5% tolerance of Arduino ceramic resonator
+    iGpsPulse ++;                                            // Overflow takes 136 years
   } else {
     iGpsPulse = 0;
     gpsStartMicros = lastGpsMicros;
-    if (millis() > 2000) {  // phaseDiff during startup is expected
-      snprintf(s, 60, "GPS pulse out of order. Deviation: %ld microseconds", phaseDiff);
+    if (millis() > 2000) {                                   // phaseDiff during startup is expected
+      snprintf(s, 60, "Unexpected GPS pulse arrival. Deviation: %ld microseconds", phaseDiff);
       Serial.println(s);
     }
   }
   if (iGpsPulse > N_STABLE) {
-    // Phase lock mechanisms 1 (see top of file). Phase = iHalfWave * OCR1A + TCNT1
-    phaseDiff = micros() - lastGpsMicros -
-      ((iHalfWave % N_HALF_WAVE) * (unsigned int)OCR1A + TCNT1) * TICK_MICROS;  // For printing only
-    unsigned long phaseTicks = (micros() - lastGpsMicros) / TICK_MICROS;
-    if (OCR1A - TCNT1 > 1) {  // Beware of concurrency issues; leave alone close to an ISR call
-      TCNT1 = phaseTicks % OCR1A;
-      iHalfWave = (phaseTicks / OCR1A) % N_HALF_WAVE;
+    // Beware of concurrency issues; do not touch TIMER1 close to an ISR, so delay for a while
+    if (OCR1A - TCNT1 < 4) {
+      avoidance = true;
+      delayMicroseconds(5 * TICK_MICROS);
     }
-    snprintf(s, 90, "LCD shutter out of phase by %ld microsecond %lu %lu", phaseDiff, micros(), lastGpsMicros);
+
+    // Phase lock mechanisms 1 for start of pulse train each second (see top of file)
+    // Phase = iHalfWave * OCR1A + TCNT1
+    unsigned long oldHalfWave = iHalfWave;                   // for printing phaseDiff below
+    unsigned int oldTCNT1 = TCNT1;                           // for printing phaseDiff below
+    unsigned long timeDiff = (micros() - lastGpsMicros);
+    unsigned long timeTicks =  timeDiff / TICK_MICROS;
+    TCNT1 = timeTicks % OCR1A;
+    iHalfWave = (timeTicks / OCR1A) % N_HALF_WAVE;
+
+    // Log experienced phase difference to serial monitor
+    unsigned long plannedDiff;
+    oldHalfWave = oldHalfWave % N_HALF_WAVE;
+    if (oldHalfWave >= N_HALF_WAVE - 2) {
+      oldHalfWave -= N_HALF_WAVE;
+    }
+    plannedDiff = (oldHalfWave * OCR1A + oldTCNT1) * TICK_MICROS;
+    snprintf(s, 90, "LCD phase: %ld us", timeDiff - plannedDiff);
     Serial.println(s);
 
     if ( (iGpsPulse % N_CALIBRATE) == 0) {
-      // Phase lock mechanisms 2 (see top of file). Set OCR1A to the ***down*** rounded ideal
-      // value, calculated from the calibrated CPU clock
+      // Phase lock mechanisms 2 for entire pulse train (see top of file)
+      // Set OCR1A to the ideal value, calculated from the calibrated CPU clock
+      // Apply *** down *** rounding for the OCR1A calculation so that the block frequency is slightly
+      // too high rather than slightly too low and the syncing occurs during the blanking period
       float calibratedFreq = CPU_FREQ * (lastGpsMicros - gpsStartMicros) / iGpsPulse / 1000000.;
-      OCR1A = 7818; //(unsigned int)(BLOCK_TICKS * calibratedFreq / CPU_FREQ);
-      snprintf(s, 60, "Calibrated CPU clock frequency (kHz): %ldf", (long)calibratedFreq);
+      OCR1A = (unsigned int)(BLOCK_TICKS * calibratedFreq / CPU_FREQ);
+      snprintf(s, 60, "CPU: %ld", (long)calibratedFreq);
       Serial.println(s);
-      snprintf(s, 60, "New value for OCR1A (in 4 microsecond ticks): %u", OCR1A);
+      snprintf(s, 60, "Block: %u ticks", OCR1A);
       Serial.println(s);
+      if (avoidance) {
+        Serial.println("Concurrency avoidance occurred!");
+      }
 
-      // Phase lock mechanisms 3 (see top of file).
+      // Phase lock mechanisms 3 (see top of file)
+      // ToDo
     }
   }
 
@@ -166,21 +187,6 @@ void run_shutter_control()
   // Prepare for next GPS 1 Hz pulse
   prevGpsMicros = lastGpsMicros;
   gpsHit = false;
-  snprintf(s, 90, "Loop duration: %lu", micros() - entryMicros);
-  Serial.println(s);
+//  snprintf(s, 90, "Loop duration: %lu", micros() - entryMicros);
+//  Serial.println(s);
 }
-
-//Problem: with a calculated OCR1A > 7817 phaseDiff experiences a sign problem
-//21:36:03.367 -> Loop duration: 3968
-//21:36:04.306 -> LCD shutter out of phase by -1000664 microsecond 38145180 38145068
-//21:36:04.353 -> Loop duration: 3964
-//21:36:05.293 -> LCD shutter out of phase by -1000668 microsecond 39146008 39145900
-//21:36:05.386 -> Loop duration: 3964
-//21:36:06.278 -> LCD shutter out of phase by -1000668 microsecond 40146840 40146732
-//21:36:06.372 -> Calibrated CPU clock frequency (kHz): 16013299f
-//21:36:06.419 -> New value for OCR1A (in 4 microsecond ticks): 7818
-//21:36:06.465 -> Loop duration: 108984
-//21:36:07.312 -> LCD shutter out of phase by -1000668 microsecond 41147672 41147564
-//21:36:07.359 -> Loop duration: 3972
-//21:36:08.297 -> LCD shutter out of phase by -1000656 microsecond 42148504 42148392
-//21:36:08.390 -> Loop duration: 3952
