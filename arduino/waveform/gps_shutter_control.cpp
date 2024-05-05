@@ -39,10 +39,10 @@ occurred between the two calls.
 #include <arduino.h>
 
 const int PIN_GPS = 2;                                // Match with hardware connection
-const int PIN_NEG = 3;                                // Match with hardware connection
-const int PIN_POS = 4;                                // Match with hardware connection
-const byte NEG_MASK = (1 << 3);                       // Precalcualte for fast interrupt handling
-const byte POS_MASK = (1 << 4);                       // Precalcualte for fast interrupt handling
+const int PIN_NEG = 3;                                // Match with hardware connection, odd negative pulses
+const int PIN_POS = 4;                                // Match with hardware connection, even positive pulses
+const byte NEG_MASK = (1 << 3);                       // Precalculate for fast interrupt handling
+const byte POS_MASK = (1 << 4);                       // Precalculate for fast interrupt handling
 const byte ZERO_MASK = 255 & ~NEG_MASK & ~POS_MASK;   // Precalcualte for fast interrupt handling
 const float CPU_FREQ = 16000000.;                     // From Arduino specs
 float calibratedFreq = CPU_FREQ;                      // Optionally set to a logged value from a previous session
@@ -84,7 +84,11 @@ ISR(TIMER1_COMPA_vect)
   // Some added timing jitter between the start of the ISR and the new setting of PORTD
   // cannot be avoided, because the conditional branches below follow a different sequence
   // of instructions. However, this is at the microsecond level.
+  // ihalfWave == 0: blanking period
+  // iHalfWave == 1, 3, 5, ..., 31 odd, negative pulses on PIN3
+  // iHalfWave == 2, 4, 6, ..., 30 even, positive pulses on PIN4
   byte pinVals;
+  iHalfWave++;
   if ( (iHalfWave % 2 == 1) || (iGpsPulse && (iHalfWave % N_HALF_WAVE == 0)) ) {
     pinVals = (PORTD & ZERO_MASK);
   } else if (iHalfWave % 4 == 2) {
@@ -93,9 +97,8 @@ ISR(TIMER1_COMPA_vect)
     pinVals = (PORTD & ZERO_MASK) | POS_MASK;
   }
   PORTD = pinVals;
-  halfWaveValues[iIsr % 36] = iHalfWave;  // iIsr and iHalfWave should rotate synchronously, but iIsr may be equal to 32 sometimes
-  iHalfWave++;
   iIsr++;
+  halfWaveValues[iIsr % 36] = iHalfWave;  // iIsr and iHalfWave should rotate synchronously, but iIsr may be equal to 32 sometimes
 }
 
 void setup_shutter_control()
