@@ -34,12 +34,13 @@ float zoom;
 boolean paused;
 boolean encounter0;  // Poor man's positive edge triggering
 boolean encounter1;
+int xpause = 200;    // Position of pause trigger point
 
 void setup() 
 {
   size(1280, 600);
   // Open the port that the board is connected to and use the same baudrate as the Arduino
-  port = new Serial(this, Serial.list()[0], 2000000);
+  port = new Serial(this, Serial.list()[1], 2000000);
   values0 = new int[width];
   values1 = new int[width];
   zoom = 1.0f;
@@ -79,9 +80,9 @@ void pushValues(IntList vals) {
       values0[i] = vals.get(2 * (i - width + nval));
       values1[i] = vals.get(2 * (i - width + nval) + 1);
     }
-  if (paused && !encounter0 && (values0[80] < 150)) {
+  if (paused && !encounter0 && (values0[xpause] < 150)) {
     encounter0 = true;
-  } else if (paused && encounter0 && !encounter1 && (values0[80] > 150)) {
+  } else if (paused && encounter0 && !encounter1 && (values0[xpause] > 150)) {
     encounter1 = true;
   }
 }

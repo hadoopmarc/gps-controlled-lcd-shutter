@@ -1,70 +1,27 @@
-volatile int gpsHit = 0;
-int timeLastGPS = 0;
-int timeCurAbs = 0;
-int timeCurRel = 0;
-int pinVal = 127;
-int lastPolarity = -1;
-int curPolarity = 0;
-int frequency = 16;
-
-// Make sure to match these to your physical set-up!
-int gpsPin = 2;
-int pinNum = 5;
-
-void gpsIn()
-{
-   gpsHit = 1;
-}
-
-int getAnalogValue(int output)
-{
-    if (output == 0) {
-        if (curPolarity != 0) {
-            lastPolarity = curPolarity;
-            curPolarity = 0;
-        }
-        return 127;
-    }
-
-    if (lastPolarity == 1) {
-        curPolarity = -1;
-        return 0;
-    } else {
-        curPolarity = 1;
-        return 255;
-    }
-}
-
-int getDigitalFromMillis(int relMillis)
-{
-    if (relMillis < 1000/16) {
-        return 0;
-    }
-    float periodMillis = 1000.0 / frequency;
-    int nCycles = relMillis / periodMillis;
-    float normMillis = relMillis - nCycles * periodMillis;
-    if (normMillis < periodMillis / 2) {
-        return 0;
-    } else {
-        return 1;
-    }
-}
+/*
+ * Arduino sketch entrypoint that calls gps_shutter_control and possibly other tasks
+ * for operating a meteor photography allsky station.
+ */
+ # include "gps_shutter_control.h"
 
 void setup()
 {
-    pinMode(pinNum, OUTPUT);
-    delay(100);
-    attachInterrupt(digitalPinToInterrupt(gpsPin),gpsIn,RISING);
+  // For writing log messages to the serial console of the Arduino IDE
+  // Keep the baudrate low to prevent large numbers of interrupts from the serial interface
+  Serial.begin(9600);
+
+  // Put setup logic for other control tasks here
+  // ...
+
+  // Keep this as final statement of the setup() function
+  setup_shutter_control();
 }
 
 void loop()
 {
-    if (gpsHit) {
-        timeLastGPS = millis();
-        gpsHit = 0;
-    }
-    timeCurAbs = millis();
-    timeCurRel = timeCurAbs - timeLastGPS;
-    pinVal = getAnalogValue(getDigitalFromMillis(timeCurRel));
-    analogWrite(pinNum, pinVal);
+  // Put other control tasks here, but keep execution time per iteration within 50 millisecond
+  // ...
+
+  // Call the LCD shutter control each iteration of the loop
+  run_shutter_control();
 }
