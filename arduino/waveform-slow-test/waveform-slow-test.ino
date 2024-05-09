@@ -7,8 +7,8 @@
 */
 const unsigned long blockMicros = 2000000;
 const int zeroVal = 127;
-const int pinNeg = 2;
-const int pinPos = 5;
+const int pinNeg = 3;
+const int pinPos = 4;
 const byte NEG_MASK = B00000100;
 const byte POS_MASK = B00010000;
 const byte ZERO_MASK = B11101011;
