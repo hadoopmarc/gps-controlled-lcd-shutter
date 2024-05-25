@@ -1,1 +1,4 @@
+*.bak
+*.zip
 datasheet/**
+fp-info-cache
