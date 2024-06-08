@@ -23,3 +23,7 @@ Based on TIMEPULSE and TIMEPULSE2 signals from a Ublox Neo-M8T SoC.
 
 ## More simple and economical design
 Based on an Arduino board.
+
+## Documentation
+
+- [Programming the Arduino Nano module](./doc/arduino-programming.md)
