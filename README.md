@@ -27,3 +27,4 @@ Based on an Arduino board.
 ## Documentation
 
 - [Programming the Arduino Nano module](./doc/arduino-programming.md)
+- [Measuring with an Arduino Oscilloscope](./doc/arduino-scope.md)

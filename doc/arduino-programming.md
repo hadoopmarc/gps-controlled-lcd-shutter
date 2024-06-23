@@ -38,15 +38,15 @@ Once the uploaded program runs, it produces log statements over the serial inter
 After this time the serial monitor shows something like the text below, every second:
 
 ```log
-    LCD phase: 0 0 0 42
+    LCD phase: 0 3 0 12
 ```
 
-These are variables used in synchronizing the timer outputs derived from MCU clock with the Pulse Per Second signal from the GPS module. The first three numbers should be zero, and the last number is the accumulated phase differerence in microseconds during one second, just before synchronization happens. This should be a figure between 0 and 128 microseconds.
+These are variables used in synchronizing the timer outputs derived from MCU clock with the Pulse Per Second signal from the GPS module. The first and third number should be zero and the second number should be small, indicating that synchronization takes place immediately after the incoming GPS pulse. The difference between the fourth and the second number should is the accumulated phase differerence in "ticks" of 4 microseconds during one second, just before synchronization happens. This should be a figure between 0 and 32 ticks (meaning between 0 and 128 microseconds).
 
 In addition to the logs that occur every second, another log message appears every 20 seconds and shows the result of calibrating the MCU clock frequency against the GPS PPS signal. It has the following format:
 
 ```log
-    Micros: 20 20000000
+    Micros: 20 20001234
     CPU: 16012345
     Block: 7810 ticks
 ```

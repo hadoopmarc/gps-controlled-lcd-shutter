@@ -58,7 +58,8 @@ const int PRESCALER = 64;                             // Prescaler value to be s
 const int TICK_MICROS = 4;                            // TIMER1 resolution with prescaler at 64
 const int N_STABLE = 10;                              // Number of successive GPS pulses required for stability
 const int N_CALIBRATE = 20;                           // Number of successive GPS pulses required for calibration (< 4200)
-const unsigned int TIMER_SAFETY = 2;                  // For being sure the duration of the pulse train < 1.000000 second
+const unsigned int TIMER_SAFETY = 1;                  // For being sure the duration of the pulse train < 1.000000 second
+                                                      // This is for block length, so impact = N * 32 * 4 = N * 128 microseconds
 
 volatile bool gpsHit = false;                         // Set by the gpsIn interrupt only and cleared after processing
 volatile unsigned long lastGpsMicros = 0;             // Set by the gpsIn interrupt only and ignored before gpsHit = true
