@@ -68,9 +68,8 @@ unsigned iGpsPulse = 0;                               // Number of successive GP
 unsigned long prevGpsMicros = 4290000000;             // For checking timely arrival of current iGpsPulse
 unsigned long gpsStartMicros = 0;                     // Start time of a sequence of successive GPS pulses
 volatile unsigned long iHalfWave = 0;                 // Phase of shutter waveform in terms of block half waves
-volatile unsigned long iIsr = 0;                      // For debugging
+volatile unsigned long iIsr = 0;                      // For monitoring
 float lastTaskWarningMillis;                          // Used to check if run_shutter_control is called in time
-int halfWaveValues[36];                               // For debugging
 
 /*
  * In the main loop lastGpsMicros is used:
@@ -98,8 +97,7 @@ ISR(TIMER1_COMPA_vect)
   // iHalfWave == 2, 4, 6, ..., 30 even, positive pulses on PIN4
   byte pinVals;
   iHalfWave++;
-  if ( (iHalfWave % 2 == 1) || (iGpsPulse && (iHalfWave % N_HALF_WAVE == 0)) ) {
-//    pinVals = (PORTD & ZERO_MASK);  regular script with opamp driver
+  if ( (iHalfWave % 2 == 1) || ((iGpsStable == N_STABLE) && (iHalfWave % N_HALF_WAVE == 0)) ) {
     pinVals = (PORTD & ZERO_MASK) | HIGH_MASK;
   } else if (iHalfWave % 4 == 2) {
     pinVals = (PORTD & ZERO_MASK) | NEG_MASK;
@@ -108,7 +106,6 @@ ISR(TIMER1_COMPA_vect)
   }
   PORTD = pinVals;
   iIsr++;
-  halfWaveValues[iIsr % 36] = iHalfWave;  // iIsr and iHalfWave should rotate synchronously, but iIsr may be equal to 32 sometimes
 }
 
 void setup_shutter_control()
@@ -135,11 +132,11 @@ void setup_shutter_control()
 void run_shutter_control()
 {
   char s[90];
-//  unsigned long entryMicros = micros();  // Temporary during development
 
   if (!gpsHit) {
     return;
   }
+
   long phaseDiff = lastGpsMicros - prevGpsMicros - 1000000;  // Uncalibrated measurement
   if (abs(phaseDiff) < 10000) {                              // 2 x 0.5% tolerance of Arduino ceramic resonator
     iGpsPulse++;
@@ -147,14 +144,8 @@ void run_shutter_control()
       iGpsStable++;
     }
   } else {
-    //ToDo: somehow this section can be entered two times in one second!
-    //11:51:23.005 -> Unexpected GPS pulse arrival. Deviation: -996604 microsecon
-    //11:51:23.052 -> Unexpected GPS pulse arrival. Deviation: -999816 microsecon
-    //11:51:23.989 -> Unexpected GPS pulse arrival. Deviation: -37864 microsecond
-    //11:51:24.035 -> Unexpected GPS pulse arrival. Deviation: -987736 microsecon
-    //11:51:24.967 -> Unexpected GPS pulse arrival. Deviation: -37856 microsecond
-    //11:51:25.015 -> Unexpected GPS pulse arrival. Deviation: -987744 microsecon
-    //11:51:25.993 -> Unexpected GPS pulse arrival. Deviation: -47440 microsecond
+    // Tested: the script recovers OK from a manually triggered unexpected GPS pulse
+    // (pin D2 connected momentarily to GND via a test lead with a 100 Ohm resistor)
     iGpsStable = 0;
     iGpsPulse = 0;
     gpsStartMicros = lastGpsMicros;
@@ -167,7 +158,7 @@ void run_shutter_control()
     // Beware of concurrency issues; do not touch TIMER1 close to an ISR, so delay for a while
     // OCR1A is calculated such that this should not happen
     unsigned int delayTicks = OCR1A - TCNT1;
-    if (delayTicks < TIMER_SAFETY * 64) {
+    if (delayTicks < 200) {     // 200 arbitrary number of ticks sufficient to execute the code below
       Serial.println("Avoidance triggered");
       delayMicroseconds((delayTicks + 8) * TICK_MICROS);
     }
@@ -211,23 +202,13 @@ void run_shutter_control()
     }
   }
 
-//  // For debugging: print iHalfwave with respect to GPS pulse
-//  snprintf(s, 90, "hws %u %u %u ... %u %u %u",
-//    halfWaveValues[0], halfWaveValues[1], halfWaveValues[2],
-//    halfWaveValues[29], halfWaveValues[30], halfWaveValues[31]);
-//  Serial.println(s);
-
   // Check behaviour of other tasks in the waveform.ino loop() function
   if (micros() - lastGpsMicros > 50000 && millis() - lastTaskWarningMillis > 3600000) {
     lastTaskWarningMillis = millis();
     Serial.println("WARN - tasks other than LCD shutter control take longer than 50 ms!");
   }
 
-  // Prepare for next GPS 1 Hz pulse
+  // Prepare for next 1 Hz GPS pulse
   prevGpsMicros = lastGpsMicros;
   gpsHit = false;
-
-//  // For debugging
-//  snprintf(s, 90, "Loop duration: %lu", micros() - entryMicros);
-//  Serial.println(s);
 }
