@@ -57,14 +57,15 @@ const int N_HALF_WAVE = 32;                           // Inverse of BLOCK_TICKS;
 const int PRESCALER = 64;                             // Prescaler value to be set for TIMER1
 const int TICK_MICROS = 4;                            // TIMER1 resolution with prescaler at 64
 const int N_STABLE = 10;                              // Number of successive GPS pulses required for stability
-const int N_CALIBRATE = 20;                           // Number of successive GPS pulses required for calibration (< 4200)
+const int N_CALIBRATE = 60;                           // Number of successive GPS pulses required for calibration (< 4200)
 const unsigned int TIMER_SAFETY = 1;                  // For being sure the duration of the pulse train < 1.000000 second
                                                       // This is for block length, so impact = N * 32 * 4 = N * 128 microseconds
 
 volatile bool gpsHit = false;                         // Set by the gpsIn interrupt only and cleared after processing
 volatile unsigned long lastGpsMicros = 0;             // Set by the gpsIn interrupt only and ignored before gpsHit = true
-unsigned long iGpsPulse = 0;                          // Number of successive GPS pulses counted
-unsigned long prevGpsMicros = 4290000000;             // For incrementing iGpsPulse
+unsigned iGpsStable = 0;                              // Number of successive GPS pulses counted for stabilization
+unsigned iGpsPulse = 0;                               // Number of successive GPS pulses counted for calibration
+unsigned long prevGpsMicros = 4290000000;             // For checking timely arrival of current iGpsPulse
 unsigned long gpsStartMicros = 0;                     // Start time of a sequence of successive GPS pulses
 volatile unsigned long iHalfWave = 0;                 // Phase of shutter waveform in terms of block half waves
 volatile unsigned long iIsr = 0;                      // For debugging
@@ -141,7 +142,10 @@ void run_shutter_control()
   }
   long phaseDiff = lastGpsMicros - prevGpsMicros - 1000000;  // Uncalibrated measurement
   if (abs(phaseDiff) < 10000) {                              // 2 x 0.5% tolerance of Arduino ceramic resonator
-    iGpsPulse ++;                                            // Overflow takes 136 years
+    iGpsPulse++;
+    if (iGpsStable < N_STABLE) {
+      iGpsStable++;
+    }
   } else {
     //ToDo: somehow this section can be entered two times in one second!
     //11:51:23.005 -> Unexpected GPS pulse arrival. Deviation: -996604 microsecon
@@ -151,6 +155,7 @@ void run_shutter_control()
     //11:51:24.967 -> Unexpected GPS pulse arrival. Deviation: -37856 microsecond
     //11:51:25.015 -> Unexpected GPS pulse arrival. Deviation: -987744 microsecon
     //11:51:25.993 -> Unexpected GPS pulse arrival. Deviation: -47440 microsecond
+    iGpsStable = 0;
     iGpsPulse = 0;
     gpsStartMicros = lastGpsMicros;
     if (millis() > 2000) {                                   // phaseDiff during 2s of startup is expected
@@ -158,11 +163,11 @@ void run_shutter_control()
       Serial.println(s);
     }
   }
-  if (iGpsPulse > N_STABLE) {
+  if (iGpsStable == N_STABLE) {
     // Beware of concurrency issues; do not touch TIMER1 close to an ISR, so delay for a while
     // OCR1A is calculated such that this should not happen
     unsigned int delayTicks = OCR1A - TCNT1;
-    if (delayTicks < 128) {
+    if (delayTicks < TIMER_SAFETY * 64) {
       Serial.println("Avoidance triggered");
       delayMicroseconds((delayTicks + 8) * TICK_MICROS);
     }
@@ -191,12 +196,15 @@ void run_shutter_control()
       unsigned long calibrationMicros = lastGpsMicros - gpsStartMicros;
       calibratedFreq = CPU_FREQ * calibrationMicros / iGpsPulse / 1000000.;
       OCR1A = calibratedFreq / PRESCALER / N_HALF_WAVE - TIMER_SAFETY;
-      snprintf(s, 60, "Micros: %lu %lu", iGpsPulse, calibrationMicros);
+      snprintf(s, 60, "Micros: %u %lu", iGpsPulse, calibrationMicros);
       Serial.println(s);
       snprintf(s, 60, "CPU: %ld", (long)calibratedFreq);
       Serial.println(s);
       snprintf(s, 60, "Block: %u ticks", OCR1A);
       Serial.println(s);
+      // Because of a short calibration period, a rolling calibration window is not needed
+      iGpsPulse = 0;
+      gpsStartMicros = lastGpsMicros;
 
     // Phase lock mechanisms 3 (see explanation at top of file)
     // Will not do; change to Nucleo-32 STM32G431 with crystal clock and 32-bit hardware timers
