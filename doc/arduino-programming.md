@@ -28,26 +28,34 @@ Programming the Arduino Nano should now be so simple as:
 
 ## Checking the logs
 
-Once the uploaded program runs, it produces log statements over the serial interface. You can check these by opening the serial monitor of the Arduino IDE (far right button on the taskbar). On powering up the PCB, the GPS-module needs about half a minute to lock on one or more satellites and after that the LCD shutter program need 10 GPS pulses before generating second markers in the driver output. During that time the serial monitor only shows:
+Once the uploaded program runs, it produces log statements over the serial interface. You can check these by opening the serial monitor of the Arduino IDE (far right button on the taskbar). On powering up the PCB, the GPS-module needs about half a minute to lock on one or more satellites and after that the LCD shutter program needs 10 GPS pulses before generating the second markers in the driver output towards the LCD shutter. During that time the serial monitor only shows:
 
 ```log
     Configuration of LCD shutter completed.
     Stabilizing...
 ```
-
-After this time the serial monitor shows something like the text below, every second:
+After this, the serial monitor shows a few log lines related to the preliminary calibration of the CPU clock frequency relative to the Pulse Per Second (PPS) signal from the GPS module. These lines have the following format:
 
 ```log
+    Micros: 10 10014560
+    CPU: 16023260
+    Block: 7822 ticks
+```
+The CPU frequency should be 16 +/- 0.08 MHz (large error margins because of the cheap ceramic resonator used on the Arduino module). The CPU frequency should only show minor variations during operation. The block ticks refer to the number of required timer events during one half wave (block pulse) of the driver output. This number is derived from the measured CPU frequency and should also show only minor variations.
+
+The calibration, including logging, is repeated every 60 seconds to account for changes in the operating conditions of the Arduino (power voltage, temperature).
+
+In addition to the calibration every minute, the serial monitor shows the phase stability of the driver pulse train, relative to the GPS PPS signal. The log lines look something like the text below, every second:
+
+```log
+    LCD phase: 0 277 9 1684
     LCD phase: 0 3 0 12
+    LCD phase: 0 4 0 12
 ```
 
-These are variables used in synchronizing the timer outputs derived from MCU clock with the Pulse Per Second signal from the GPS module. The first and third number should be zero and the second number should be small, indicating that synchronization takes place immediately after the incoming GPS pulse. The difference between the fourth and the second number should is the accumulated phase differerence in "ticks" of 4 microseconds during one second, just before synchronization happens. This should be a figure between 0 and 32 ticks (meaning between 0 and 128 microseconds).
+These are variables used in synchronizing the timer outputs derived from the MCU clock with the GPS PPS signal. The first and third number should be zero and the second number should be small, indicating that synchronization takes place immediately after the incoming GPS pulse. The difference between the fourth and the second number is the accumulated phase differerence during one second in "ticks" of 4 microseconds, just before synchronization happens. This should be a figure between 0 and 32 ticks (meaning between 0 and 128 microseconds). Only the very first log line shows a large phase difference, because the driver pulse train was not synchronized to the GPS signal before that time.
 
-In addition to the logs that occur every second, another log message appears every 20 seconds and shows the result of calibrating the MCU clock frequency against the GPS PPS signal. It has the following format:
+The logging described above is the logging during normal operation. There are two additional log messages that can occur and they indicate possible failures in the system:
 
-```log
-    Micros: 20 20001234
-    CPU: 16012345
-    Block: 7810 ticks
-```
-The CPU frequency should be 16 MHz with an error margin of 0.5% (so large because of the cheap ceramic resonator used on the Arduino module). The CPU frequency should only show minor variations during operation. The block ticks refer to the number of required timer events during one half wave (block pulse) of the driver output. This number is derived from the measured CPU frequency and should also show only minor variations.
+1. "Unexpected GPS pulse arrival. Deviation: 21432 microseconds". This indicates instable operation of the GPS module. This can have all kinds of causes, including a too weak GPS signal, an instable power supply, interference from other systems, hardware failure, etc.
+2. "Avoidance triggered". This indicates that synchronization starts before the pulse train of the previous second has finished. Possible causes are a bug in the Arduino script and a hardware failure of the Arduino module.
