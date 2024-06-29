@@ -1,12 +1,12 @@
 /*
-Script for generating digital signals as input for a driver of an LCD-shutter.
+Script for generating digital signals as input for an H-bridge driver of an LCD-shutter.
 The signals have a specific pattern useful for meteor photography and are synced
 to the 1 Hz GPS TIMEPULSE signal, also called PPS signal. For this, the script
 applies three mechanisms:
 1. Shortly after each GPS pulse, so during the blanking period of a 1 second cycle, a
    new train of 15 pulses is started that initially is synced very closely to the GPS
    signal.
-2. The CPU frequency is measured during a relatively long period (> 60 seconds) with
+2. The CPU frequency is measured during a relatively long period (>= 60 seconds) with
    the GPS pulses as an accurate reference. After that, the timing of the train of 15
    pulses is done using this calibrated CPU frequency. This significantly improves
    the syncing of the pulse train at the end of a cycle. Note that the Arduino clock
@@ -37,11 +37,6 @@ between successive micros() calls are used, which are always correct irrespectiv
 occurred between the two calls.
 */
 
-/* Temporary extra script for testing with an H-bridge as driver. The LCD-shutter needs the slow decay mode of the H-bridge to
- *  become transparent. In the slow decay mode the terminals of the LCD-shutter are shortcut. The slow decay mode requires
- *  a logical high signal on both input terminals of the DRV8833 module. This is different from driving the opamp as in the
- *  regulare script.
- */
 #include <arduino.h>
 
 const int PIN_GPS = 2;                                // Match with hardware connection
@@ -56,7 +51,7 @@ float calibratedFreq = CPU_FREQ;                      // Optionally set to a log
 const int N_HALF_WAVE = 32;                           // Inverse of BLOCK_TICKS;
 const int PRESCALER = 64;                             // Prescaler value to be set for TIMER1
 const int TICK_MICROS = 4;                            // TIMER1 resolution with prescaler at 64
-const int N_STABLE = 10;                              // Number of successive GPS pulses required for stability
+const int N_STABLE = 10;                              // Number of successive GPS pulses required for starting second markers
 const int N_CALIBRATE = 60;                           // Number of successive GPS pulses required for calibration (< 4200)
 const unsigned int TIMER_SAFETY = 1;                  // For being sure the duration of the pulse train < 1.000000 second
                                                       // This is for block length, so impact = N * 32 * 4 = N * 128 microseconds
@@ -95,6 +90,11 @@ ISR(TIMER1_COMPA_vect)
   // ihalfWave == 0: blanking period
   // iHalfWave == 1, 3, 5, ..., 31 odd, negative pulses on PIN3
   // iHalfWave == 2, 4, 6, ..., 30 even, positive pulses on PIN4
+  //
+  // The LCD-shutter needs the slow decay mode of the H-bridge to become transparent. In the slow decay mode the terminals of the
+  // LCD-shutter are shortcut. The slow decay mode requires a logical high signal on both input terminals of the TB6612 module.
+  // This is different compared to the script version for controlling an opamp-based driver.
+
   byte pinVals;
   iHalfWave++;
   if ( (iHalfWave % 2 == 1) || ((iGpsStable == N_STABLE) && (iHalfWave % N_HALF_WAVE == 0)) ) {
@@ -106,6 +106,29 @@ ISR(TIMER1_COMPA_vect)
   }
   PORTD = pinVals;
   iIsr++;
+}
+
+void calibrate()
+{
+  int S = 90;
+  char s[S];
+
+  // Phase lock mechanisms 2 for entire pulse train (see explanation at top of file)
+  // Set OCR1A to the ideal value, calculated from the calibrated CPU clock
+  // Apply *** down *** rounding for the OCR1A calculation so that the block frequency is slightly
+  // too high rather than slightly too low and the syncing occurs during the blanking period
+  unsigned long calibrationMicros = lastGpsMicros - gpsStartMicros;
+  calibratedFreq = CPU_FREQ * calibrationMicros / iGpsPulse / 1000000.;
+  OCR1A = calibratedFreq / PRESCALER / N_HALF_WAVE - TIMER_SAFETY;
+  snprintf(s, S, "Micros: %u %lu", iGpsPulse, calibrationMicros);
+  Serial.println(s);
+  snprintf(s, S, "CPU: %ld", (long)calibratedFreq);
+  Serial.println(s);
+  snprintf(s, S, "Block: %u ticks", OCR1A);
+  Serial.println(s);
+
+// Phase lock mechanisms 3 (see explanation at top of file)
+// Will not do; change to Nucleo-32 STM32G431 with crystal clock and 32-bit hardware timers
 }
 
 void setup_shutter_control()
@@ -131,7 +154,8 @@ void setup_shutter_control()
 
 void run_shutter_control()
 {
-  char s[90];
+  int S = 90;
+  char s[S];
 
   if (!gpsHit) {
     return;
@@ -142,6 +166,9 @@ void run_shutter_control()
     iGpsPulse++;
     if (iGpsStable < N_STABLE) {
       iGpsStable++;
+      if (iGpsStable == N_STABLE) {
+        calibrate();  // preliminary calibration based on N_STABLE seconds only
+      }
     }
   } else {
     // Tested: the script recovers OK from a manually triggered unexpected GPS pulse
@@ -150,10 +177,11 @@ void run_shutter_control()
     iGpsPulse = 0;
     gpsStartMicros = lastGpsMicros;
     if (millis() > 2000) {                                   // phaseDiff during 2s of startup is expected
-      snprintf(s, 60, "Unexpected GPS pulse arrival. Deviation: %ld microseconds", phaseDiff);
+      snprintf(s, S, "Unexpected GPS pulse arrival. Deviation: %ld microseconds", phaseDiff);
       Serial.println(s);
     }
   }
+
   if (iGpsStable == N_STABLE) {
     // Beware of concurrency issues; do not touch TIMER1 close to an ISR, so delay for a while
     // OCR1A is calculated such that this should not happen
@@ -176,29 +204,14 @@ void run_shutter_control()
 
     // Log experienced phase difference to serial monitor
     oldHalfWave = oldHalfWave % N_HALF_WAVE;
-    snprintf(s, 90, "LCD phase: %lu %lu %lu %u", iIsr, observedTicks, oldHalfWave, oldTCNT1);
+    snprintf(s, S, "LCD phase: %lu %lu %lu %u", iIsr, observedTicks, oldHalfWave, oldTCNT1);
     Serial.println(s);
 
     if ( (iGpsPulse % N_CALIBRATE) == 0) {
-      // Phase lock mechanisms 2 for entire pulse train (see explanation at top of file)
-      // Set OCR1A to the ideal value, calculated from the calibrated CPU clock
-      // Apply *** down *** rounding for the OCR1A calculation so that the block frequency is slightly
-      // too high rather than slightly too low and the syncing occurs during the blanking period
-      unsigned long calibrationMicros = lastGpsMicros - gpsStartMicros;
-      calibratedFreq = CPU_FREQ * calibrationMicros / iGpsPulse / 1000000.;
-      OCR1A = calibratedFreq / PRESCALER / N_HALF_WAVE - TIMER_SAFETY;
-      snprintf(s, 60, "Micros: %u %lu", iGpsPulse, calibrationMicros);
-      Serial.println(s);
-      snprintf(s, 60, "CPU: %ld", (long)calibratedFreq);
-      Serial.println(s);
-      snprintf(s, 60, "Block: %u ticks", OCR1A);
-      Serial.println(s);
-      // Because of a short calibration period, a rolling calibration window is not needed
+      calibrate();
+      // Simple reset of the calibration window; a longer rolling window seems unnecessary
       iGpsPulse = 0;
       gpsStartMicros = lastGpsMicros;
-
-    // Phase lock mechanisms 3 (see explanation at top of file)
-    // Will not do; change to Nucleo-32 STM32G431 with crystal clock and 32-bit hardware timers
     }
   }
 
