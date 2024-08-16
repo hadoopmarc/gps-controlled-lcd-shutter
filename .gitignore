@@ -1,4 +1,5 @@
 *.kicad_sch-bak
 *.zip
 datasheet/**
+presentation/**
 fp-info-cache
