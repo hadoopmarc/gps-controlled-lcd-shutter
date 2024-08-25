@@ -185,6 +185,13 @@ void loop() {
   cout << F(", Cluster size (bytes): ") << sd.vol()->bytesPerCluster();
   cout << endl << endl;
 
+  // MdL insert creation of file
+  // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
+  FsFile testfile;
+  testfile.open("arduino/very-very-long-filename.txt", O_WRONLY | O_CREAT | O_TRUNC);
+  testfile.write( "See if this works!");
+  testfile.close();
+
   cout << F("Files found (date time size name):\n");
   sd.ls(LS_R | LS_DATE | LS_SIZE);
 
