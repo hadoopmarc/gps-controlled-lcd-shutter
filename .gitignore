@@ -2,4 +2,5 @@
 *.zip
 datasheet/**
 presentation/**
+stm32/**
 fp-info-cache
