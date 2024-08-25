@@ -5,14 +5,12 @@
   SD library is based in order to get info about your SD card.
   Very useful for testing a card when you're not sure whether its working or not.
 
-  The circuit:
-    SD card attached to SPI bus as follows:
- ** MOSI - pin 11 on Arduino Uno/Duemilanove/Diecimila
- ** MISO - pin 12 on Arduino Uno/Duemilanove/Diecimila
- ** CLK - pin 13 on Arduino Uno/Duemilanove/Diecimila
- ** CS - depends on your SD card shield or module.
-     Pin 4 used here for consistency with other Arduino examples
-
+  SD card attached to SPI bus as follows:
+   ** MOSI - digital pin 11 on Arduino Uno/Duemilanove/Diecimila
+   ** MISO - digital pin 12 on Arduino Uno/Duemilanove/Diecimila
+   ** CLK - digital pin 13 on Arduino Uno/Duemilanove/Diecimila
+   ** CS - depends on your SD card shield or module; enter digital pin 4 in
+           the menu below for the AliExpress sdcard reader
 
   created  28 Mar 2011
   by Limor Fried
