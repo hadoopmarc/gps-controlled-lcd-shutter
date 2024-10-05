@@ -7,8 +7,9 @@ SD card attached to SPI bus as follows:
  ** MOSI - digital pin 11 on Arduino Uno/Duemilanove/Diecimila
  ** MISO - digital pin 12 on Arduino Uno/Duemilanove/Diecimila
  ** CLK - digital pin 13 on Arduino Uno/Duemilanove/Diecimila
- ** CS - depends on your SD card shield or module; enter digital pin 4 in
-         the menu below for the AliExpress sdcard reader
+ ** CS - depends on your SD card shield or module or connections; enter
+ **      digital pin 5 in the menu below for the AliExpress sdcard reader
+ **      on the GPS LCD-shutter board
 
 For wiring on Arduino Uno, also see:
     https://randomnerdtutorials.com/guide-to-sd-card-module-with-arduino/
