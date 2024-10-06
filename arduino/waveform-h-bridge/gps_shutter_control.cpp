@@ -49,6 +49,12 @@ The code below implements a state machine with the states described below (based
 #include <arduino.h>
 #include "gps_shutter_control.h"
 
+// Values in this section may be edited by the user
+const int SHUT_PERCENTAGE = 20;                       // Percentage of time that the LCD shutter receives a voltage (in range [15, 70])
+int ocr1aShut;                                        // Precalculated timer value based on SHUT_PERCENTAGE and auto-calibration
+int ocr1aOpen;                                        //       ,,        ,,    ,,    ,,          ,,                  ,,
+
+// Values below depend on applied hardware and should not be changed
 const int PIN_GPS = 2;                                // Match with hardware connection
 const int PIN_NEG = 3;                                // Match with hardware connection, odd negative pulses
 const int PIN_POS = 4;                                // Match with hardware connection, even positive pulses
@@ -57,7 +63,6 @@ const byte POS_MASK = (1 << 4);                       // Precalculate for fast i
 const byte HIGH_MASK = NEG_MASK | POS_MASK;           // Additional mask for H-bridge driver
 const byte ZERO_MASK = 255 & ~NEG_MASK & ~POS_MASK;   // Precalcualte for fast interrupt handling
 const float MCU_MHZ = 16;                             // From Arduino specs
-float calibratedFreq = 1000000. * MCU_MHZ;            // Optionally set to a logged value from a previous session
 const int N_HALF_WAVE = 32;                           // Inverse of BLOCK_TICKS;
 const int PRESCALER = 64;                             // Prescaler value to be set for TIMER1
 const int TICK_MICROS = 4;                            // TIMER1 resolution with prescaler at 64
@@ -75,6 +80,7 @@ unsigned long prevGpsMicros;                          // For checking timely arr
 unsigned long gpsStartMicros;                         // Start time of a sequence of successive GPS pulses
 volatile unsigned long iHalfWave = 0;                 // Phase of shutter waveform in terms of block half waves
 volatile unsigned long iIsr = 0;                      // For monitoring
+float calibratedFreq = 1000000. * MCU_MHZ;            // Optionally set to a logged value from a previous session
 unsigned long compensationTicks;                      // Code execution duration from time measurement to timer adjustment
 float lastTaskWarningMillis;                          // Used to check if run_shutter_control is called in time
 
@@ -120,23 +126,32 @@ ISR(TIMER1_COMPA_vect)
     pinVals = (PORTD & ZERO_MASK) | POS_MASK;
   }
   PORTD = pinVals;
+
+  // Alternate the "shut" and "open" timer compare values to realize the set SHUT_PERCENTAGE
+  if (iHalfWave % 2 == 0) {
+    OCR1A = ocr1aShut;
+  } else {
+    OCR1A = ocr1aOpen;
+  }
+
   iIsr++;
 }
 
-void calibrate(unsigned int nPulse)
+void calibrate(unsigned nPulse, unsigned long calibrationMicros)
 {
   // Phase lock mechanisms 2 for entire pulse train (see explanation at top of file)
   // Set OCR1A to the ideal value, calculated from the calibrated MCU clock
   // Apply *** down *** rounding for the OCR1A calculation so that the block frequency is slightly
   // too high rather than slightly too low and the syncing occurs during the blanking period
-  long calibrationMicros = lastGpsMicros - gpsStartMicros;
   calibratedFreq = MCU_MHZ * calibrationMicros / nPulse;
-  OCR1A = calibratedFreq / PRESCALER / N_HALF_WAVE - TIMER_SAFETY;
-  snprintf(s, S, "Micros: %u %ld", nPulse, calibrationMicros);
+  unsigned int ocr1a = calibratedFreq / PRESCALER / N_HALF_WAVE - TIMER_SAFETY;
+  ocr1aShut = ocr1a * SHUT_PERCENTAGE / (long) 100;     // (long) typecast prevents integer overflow
+  ocr1aOpen = ocr1a - ocr1aShut;
+  snprintf(s, S, "Micros: %u %lu", iGpsPulse, calibrationMicros);
   Serial.println(s);
   snprintf(s, S, "MCU: %ld", (long)calibratedFreq);
   Serial.println(s);
-  snprintf(s, S, "Block: %u ticks", OCR1A);
+  snprintf(s, S, "Block: %u ticks", ocr1a);
   Serial.println(s);
 
 // Phase lock mechanisms 3 (see explanation at top of file)
@@ -145,6 +160,14 @@ void calibrate(unsigned int nPulse)
 
 void setup_shutter_control()
 {
+  // Assert valid value of SHUT_PERCENTAGE
+  if ( (SHUT_PERCENTAGE < 15) || (SHUT_PERCENTAGE > 70) ) {
+    Serial.println("Invalid SHUT_PERCENTAGE");
+    while (true) {
+      delay(1000);
+    }
+  }
+
   // PIN I/O configs
   attachInterrupt(digitalPinToInterrupt(PIN_GPS), gpsIn, RISING);
   pinMode(PIN_NEG, OUTPUT);
@@ -157,8 +180,8 @@ void setup_shutter_control()
   TCCR1B = (1<<CS10) | (1<<CS11);                                   // set the prescalar at 64 (OCR1A ticks of 4 microsecond)
   TCCR1B |= (1<<WGM12);                                             // set CTC mode (Clear Timer on Compare)
   TIMSK1 |= (1<<OCIE1A);                                            // enable TIMER1 interrupts
-  OCR1A = calibratedFreq / PRESCALER / N_HALF_WAVE - TIMER_SAFETY;  // initial TIMER1 compare value for 16 Hz block half wave
   TCNT1 = 0;                                                        // TIMER1 counter start value
+  calibrate(1, 1000000L);                                           // set initial TIMER1 compare values assuming zero phase difference
 
   lastTaskWarningMillis = millis() - 3600000;                       // No warning during the past hour
   snprintf(s, S, "Waveform-H-bridge version: %s", VERSION);
@@ -222,13 +245,14 @@ void run_shutter_control()
     }
 
     // Preliminary calibration of the MCU clock against the GPS pulses
+    unsigned long calibrationMicros = lastGpsMicros - gpsStartMicros;
     if (iGpsPulse == N_STABLE) {
-      calibrate(N_STABLE);
+      calibrate(N_STABLE, calibrationMicros);
     }
 
     // Periodoc calibration of the MCU clock against the GPS pulses
-    if (iGpsPulse % N_CALIBRATE == 0) {
-      calibrate(N_CALIBRATE);
+    if ( (iGpsPulse % N_CALIBRATE) == 0) {
+      calibrate(N_CALIBRATE, calibrationMicros);
       // Simple reset of the calibration window; a longer rolling window seems unnecessary
       gpsStartMicros = lastGpsMicros;
     }
