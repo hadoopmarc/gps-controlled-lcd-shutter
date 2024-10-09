@@ -26,6 +26,8 @@ Programming the Arduino Nano should now be so simple as:
 4. select the right COM-port from the "Tools / Port" menu option (if no COM port is marked as Arduino Nano, disconnect and reconnect the Arduino to discover the right COM port)
 5. push the "Upload ->" button in the taskbar. If the compilation fails, please contact the repository owner. If the upload fails, disconnect and reconnect the Arduino and try again.
 
+The microcontroller on an Arduino board may have so-called [lock bits](https://microchip.my.site.com/s/article/Use-of-Lock-Bits-in-AVR-devices)or [fuses](https://circuitdigest.com/microcontroller-projects/understanding-fuse-bits-in-atmega328p-to-enhance-arduino-programming-skills) set such that it cannot be programmed with the Arduino IDE anymore. The lockbits can be reset by following the [Arduino bootloader burning procedure](https://docs.arduino.cc/built-in-examples/arduino-isp/ArduinoISP/#recap-burn-the-bootloader-in-8-steps). Resetting fuses requires 12V programming with a [more convoluted setup](https://www.instructables.com/HV-Rescue-Simple/) and is totally impractical for an Arduino Nano with a soldered SMD microcontroller.
+
 ## Checking the logs
 
 Once the uploaded program runs, it produces log statements over the serial interface. You can check these by opening the serial monitor of the Arduino IDE (far right button on the taskbar). On powering up the PCB, the GPS-module needs about half a minute to lock on one or more satellites and after that the LCD shutter program needs 10 GPS pulses before generating the second markers in the driver output towards the LCD shutter. During that time the serial monitor only shows:
@@ -59,3 +61,40 @@ The logging described above is the logging during normal operation. There are tw
 
 1. "Unexpected GPS pulse arrival. Deviation: 21432 microseconds". This indicates instable operation of the GPS module. This can have all kinds of causes, including a too weak GPS signal, an instable power supply, interference from other systems, hardware failure, etc.
 2. "Avoidance triggered". This indicates that synchronization starts before the pulse train of the previous second has finished. Possible causes are a bug in the Arduino script and a hardware failure of the Arduino module.
+
+## Bootloader burning on Arduino
+
+Cloned Arduino Nano modules ordered from China may have the so-called "Old bootloader". Although the Arduino IDE offers the option to upload scripts to modules with the "Old bootloader" instead of the default boatloader, this is annoying from a maintenance perspective. The Arduino bootloader burning procedure described [here](https://docs.arduino.cc/built-in-examples/arduino-isp/ArduinoISP/#recap-burn-the-bootloader-in-8-steps) has clear instructions for how to use the Arduino IDE for replacing the bootloader using a second Arduino module, but the wiring instructions are incomplete. Below, a description is added of an Arduino module's ISCP pins as well as their orientation.
+
+### ISCP pins ([source](https://docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf))
+
+1. CIPO <--> CIPO/D12
+2. +5V <--> +5V for Uno and Nano, some boards need +3V
+3. SCK <--> SCK/D13
+4. COPI <--> COPI/D11
+5. RST <--- D10
+6. GND <--> GNDS
+
+Learnt from reading several descriptions:
+
+- the RST ISCP pin can only be used as input and is connected to D10 of the programmer board
+- other ISCP pins can be used as both input and output
+- CIPO connected to CIPO, COPI to COPI (no crosswiring as for serial RX/TX)
+- older Arduino descriptions call the ISP pins MISO/MOSI, newer ones CIPO/COPI (controller/peripheral vs master/slave)
+
+### ISCP Header orientation
+
+Arduino modules may have the ISCP connector marked with a `1`, an `ISCP` mark, or both. Pin numbers with respect to these marks go like:
+
+|| | | | | |
+||-|-|-|-|-|
+|<td colspan=2>mark</td>|
+||6|5|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|1|2|
+||4|3| |3|4|
+||2|1| |5|6|
+||||<td colspan=2>mark</td>|
+
+- my Arduino Nano clone has a mark "1" with pin 1 facing the edge of the board
+- official Arduino Uno R3 has a mark "ISCP" with pin 1 facing the center of the board
+- marking of clones may differ from legitimate boards
+
