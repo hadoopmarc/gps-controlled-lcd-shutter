@@ -8,7 +8,6 @@ The required pattern for obstructing the light passing through the camera lens i
 
 ![](doc/image/allsky-20200922-3h53m30sUT.png)
 
-
 ## Reference design
 
 When using an LCD shutter to realize the required pattern one needs an LCD opaqueness waveform represented as signal I in the figure below. The end of a long part of the meteor trail - or the rising edge of the first pulse of a pulse train in signal I - occurs a N + 2/32 seconds exactly.
@@ -26,7 +25,7 @@ These requirements make that the LCD-shutter is better not driven by logical out
 
 For converting signals A and B into signals F and G, a few CMOS NAND ports and a D-flipflop are applied. Note that the 1 Hz signal is also fed into the reset port of the flipflop to have the edges of the 8 Hz signals D and E coincide with the rising edge of the 1 Hz signal.
 
-![](doc/image/logic-driver-circuit.png)
+![](doc/image/schematic-combi-design.png)
 
 ## Optimized design
 
@@ -44,7 +43,9 @@ Presenting the reference design to two different audiences resulted in valuable 
 - the required waveforms can also be produced by a microcontroller such as the Arduino board, by only using the 1 Hz output signal of a GPS module and using the internal, less precise clock of the microcontroller to obtain the 16 Hz timing information (see [this contribution to the repository](https://github.com/hadoopmarc/gps-controlled-lcd-shutter/commit/29299f46e7cd1bd2d8dd73f03644191cccfc6193)). Now, the cheaper Neo-M8N suffices to provide the 1 Hz timing data.
 - an H-bridge module - often used to drive a DC motor - seems also suitable to drive the LCD shutter. An H-bridge only requires a positive power supply and can deliver high output currents.
 
-This feedback resulted in the final optimized design, displayed on the lower part of the electronic circuit diagram. As the LCD shutter is already driven with a 16 Hz frequency, the H-bridge PWM duty cycle has a fixed setting of 100%. An H-bridge has two modes for a low output voltage, see the truth table below: short circuit the output pins ("Short brake" in motor terms) or disconnect the output pins ("Free run until frictional stop" in motor terms). It turns out that the LCD shutter needs the short circuit so that it can release its internal charge/polarity and become transparent as fast as possible.
+This feedback resulted in the final optimized design, displayed in the electronic circuit diagram below. As the LCD shutter is already driven with a 16 Hz frequency, the H-bridge PWM duty cycle has a fixed setting of 100%. An H-bridge has two modes for a low output voltage, see the truth table below: short circuit the output pins ("Short brake" in motor terms) or disconnect the output pins ("Free run until frictional stop" in motor terms). It turns out that the LCD shutter needs the short circuit so that it can release its internal charge/polarity and become transparent as fast as possible.
+
+![](doc/image/schematic-mcu-only.png)
 
 ![](doc/image/TB6612-truth.png)
 
