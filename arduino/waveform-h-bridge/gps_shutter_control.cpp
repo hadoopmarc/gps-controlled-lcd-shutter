@@ -35,9 +35,23 @@ The code below uses micros() for time keeping based on the CPU clock. The Arduin
 counter for the micros() function, which overflows after about 70 minutes. Therefore, only time differences
 between successive micros() calls are used, which are always correct irrespective of any overflow that
 occurred between the two calls.
+
+The code below implements a state machine with the states described below (based on iGpsStable and iGpsPulse).
+|-> INIT - entered at the start or after receiving an out-of-phase GPS pulse
+|    |
+|    |
+|    |-> ZERO - entered when receiving the zeroth GPS pulse while being in the INIT state
+|        |
+|        |
+|        |-> STABLE - entered when receiving GPS pulse number N_STABLE while being in the FIRST state
+|            |
+|            |
+|            |-> CALIBRATED - entered when receiving GPS pulse number N_CALIBRATE while being in the STABLE state
+|----------------|
 */
 
 #include <arduino.h>
+#include "gps_shutter_control.h"
 
 const int PIN_GPS = 2;                                // Match with hardware connection
 const int PIN_NEG = 3;                                // Match with hardware connection, odd negative pulses
@@ -51,8 +65,10 @@ float calibratedFreq = CPU_FREQ;                      // Optionally set to a log
 const int N_HALF_WAVE = 32;                           // Inverse of BLOCK_TICKS;
 const int PRESCALER = 64;                             // Prescaler value to be set for TIMER1
 const int TICK_MICROS = 4;                            // TIMER1 resolution with prescaler at 64
-const int N_STABLE = 10;                              // Number of successive GPS pulses required for starting second markers
-const int N_CALIBRATE = 60;                           // Number of successive GPS pulses required for calibration (< 4200)
+const int N_INIT = -1;                                // iGpsPulse value for the INIT state (no GPS pulse received)
+const int N_ZERO = 0;                                 // iGpsPulse value for the ZERO state (zeroth GPS pulse received)
+const int N_STABLE = 10;                              // iGpsPulse value for the STABLE state: starting second markers based on the MCU clock
+const int N_CALIBRATE = 60;                           // iGpsPulse value for the CALIBRATE state (< 4200): GPS-calibrated second markers 
 const unsigned int TIMER_SAFETY = 1;                  // For being sure the duration of the pulse train < 1.000000 second
                                                       // This is for block length, so impact = N * 32 * 4 = N * 128 microseconds
 
@@ -65,6 +81,9 @@ unsigned long gpsStartMicros = 0;                     // Start time of a sequenc
 volatile unsigned long iHalfWave = 0;                 // Phase of shutter waveform in terms of block half waves
 volatile unsigned long iIsr = 0;                      // For monitoring
 float lastTaskWarningMillis;                          // Used to check if run_shutter_control is called in time
+
+const int S = 90;
+char s[S];                                            // Global character buffer for sprintf() + Serial.println()
 
 /*
  * In the main loop lastGpsMicros is used:
@@ -110,9 +129,6 @@ ISR(TIMER1_COMPA_vect)
 
 void calibrate()
 {
-  int S = 90;
-  char s[S];
-
   // Phase lock mechanisms 2 for entire pulse train (see explanation at top of file)
   // Set OCR1A to the ideal value, calculated from the calibrated CPU clock
   // Apply *** down *** rounding for the OCR1A calculation so that the block frequency is slightly
@@ -149,14 +165,13 @@ void setup_shutter_control()
   TCNT1 = 0;                                                        // TIMER1 counter start value
 
   lastTaskWarningMillis = millis() - 3600000;  // No warning during the past hour
-  Serial.println("Configuration of LCD shutter completed\nStabilizing...");
+  snprintf(s, S, "Waveform-H-bridge version: ", VERSION);
+  Serial.println(s);
+  Serial.println("Configuration completed\nStabilizing...");
 }
 
 void run_shutter_control()
 {
-  int S = 90;
-  char s[S];
-
   if (!gpsHit) {
     return;
   }

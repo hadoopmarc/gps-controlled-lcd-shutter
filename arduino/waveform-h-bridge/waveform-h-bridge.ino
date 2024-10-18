@@ -2,7 +2,7 @@
  * Arduino sketch entrypoint that calls gps_shutter_control and possibly other tasks
  * for operating a meteor photography allsky station.
  */
- # include "gps_shutter_control.h"
+#include "gps_shutter_control.h"
 
 void setup()
 {

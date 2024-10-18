@@ -40,7 +40,7 @@ void setup()
 {
   size(1280, 600);
   // Open the port that the board is connected to and use the same baudrate as the Arduino
-  port = new Serial(this, Serial.list()[1], 2000000);
+  port = new Serial(this, Serial.list()[0], 2000000);
   values0 = new int[width];
   values1 = new int[width];
   zoom = 1.0f;
