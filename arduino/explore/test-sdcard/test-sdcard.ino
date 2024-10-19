@@ -35,7 +35,8 @@ SdFile root;
 // Adafruit SD shields and modules: pin 10
 // Sparkfun SD shield: pin 8
 // MKRZero SD: SDCARD_SS_PIN
-const int chipSelect = 4;
+// AliExpress miniature 6-pin SD card reader: pin 5
+const int chipSelect = 5;
 
 void setup() {
   // Open serial communications and wait for port to open:
