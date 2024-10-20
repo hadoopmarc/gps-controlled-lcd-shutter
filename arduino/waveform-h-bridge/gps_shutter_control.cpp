@@ -65,7 +65,7 @@ const int N_INIT = -1;                                // iGpsPulse value for the
 const int N_ZERO = 0;                                 // iGpsPulse value for the ZERO state (first GPS pulse interval started)
 const int N_STABLE = 10;                              // iGpsPulse value for the STABLE state: starting second markers (short GPS calibration interval)
 const int N_CALIBRATE = 60;                           // iGpsPulse value for the CALIBRATED state (< 4200): GPS-calibrated second markers
-const unsigned int TIMER_SAFETY = 2;                  // For being sure the duration of the pulse train < 1.000000 second
+const unsigned int TIMER_SAFETY = 1;                  // For being sure the duration of the pulse train < 1.000000 second
                                                       // This is for block length, so impact = N * 32 * 4 = N * 128 microseconds
 
 volatile bool gpsHit = false;                         // Set by the gpsIn interrupt only and cleared after processing
@@ -75,6 +75,7 @@ unsigned long prevGpsMicros;                          // For checking timely arr
 unsigned long gpsStartMicros;                         // Start time of a sequence of successive GPS pulses
 volatile unsigned long iHalfWave = 0;                 // Phase of shutter waveform in terms of block half waves
 volatile unsigned long iIsr = 0;                      // For monitoring
+unsigned long compensationTicks;                      // Code execution duration from time measurement to timer adjustment
 float lastTaskWarningMillis;                          // Used to check if run_shutter_control is called in time
 
 const int S = 90;
@@ -159,12 +160,23 @@ void setup_shutter_control()
   OCR1A = calibratedFreq / PRESCALER / N_HALF_WAVE - TIMER_SAFETY;  // initial TIMER1 compare value for 16 Hz block half wave
   TCNT1 = 0;                                                        // TIMER1 counter start value
 
-  lastTaskWarningMillis = millis() - 3600000;  // No warning during the past hour
+  lastTaskWarningMillis = millis() - 3600000;                       // No warning during the past hour
   snprintf(s, S, "Waveform-H-bridge version: %s", VERSION);
   Serial.println(s);
   snprintf(s, S, "Electrical blocking percentage: %u%%", 50);
   Serial.println(s);
   Serial.println("Configuration completed\nStabilizing...");
+
+  // // Offline execution time measurements of copied code block: takes 40 microseconds = 10 ticks
+  // unsigned long observedMicros = micros();
+  // unsigned long observedDiff = observedMicros - lastGpsMicros;
+  // unsigned long observedTicks = observedDiff / TICK_MICROS;
+  // unsigned int newTCNT1 = observedTicks % OCR1A;
+  // TCNT1 = newTCNT1 + 10;
+  // unsigned long time2 = micros();
+  // Serial.println(observedMicros);
+  // Serial.println(time2);
+  compensationTicks = 10;
 }
 
 void run_shutter_control()
@@ -177,29 +189,35 @@ void run_shutter_control()
     gpsStartMicros = lastGpsMicros;
   }
   if (iGpsPulse >= N_STABLE) {
-    // Beware of concurrency issues; do not touch TIMER1 close to an ISR, so delay for a while
-    // OCR1A is calculated such that this should not happen
-    // unsigned int delayTicks = OCR1A - TCNT1;
-    // if (delayTicks < 200) {     // 200 arbitrary number of ticks sufficient to execute the code below
-    //   Serial.println("Avoidance triggered");
-    //   delayMicroseconds((delayTicks + 8) * TICK_MICROS);
-    // }
+    // Beware of concurrency issues; do not touch TIMER1 close to an ISR, so introduce a short delay
+    // OCR1A is calculated such that this should not happen during stable conditions
+    unsigned int delayTicks = OCR1A - TCNT1;
+    if (delayTicks < 50) {     // 50 arbitrary number of ticks sufficient to execute the code below
+      delayMicroseconds((delayTicks + 8) * TICK_MICROS);
+      if (iGpsPulse % 6 == 0) {
+        Serial.println("Avoidance triggered");
+      }
+    }
 
     // Phase lock mechanisms 1 for start of pulse train each second (see explanation at top of file)
     // Phase = iHalfWave * OCR1A + TCNT1
+    unsigned long oldIsr = iIsr;                                    // iIsr at time of phaseDiff measurement
     unsigned long oldHalfWave = iHalfWave;                          // for printing phaseDiff below
     unsigned int oldTCNT1 = TCNT1;                                  // for printing phaseDiff below
-    unsigned long observedDiff = micros() - lastGpsMicros;          // small positive value, depending on other tasks in loop()
+    unsigned long observedMicros = micros();                        // separate statement to allow for time measurement
+    // Start of code block for which execution time needs to be compensated
+    unsigned long observedDiff = observedMicros - lastGpsMicros;    // small positive value, depending on other tasks in loop()
     unsigned long observedTicks = observedDiff / TICK_MICROS;
     unsigned int newTCNT1 = observedTicks % OCR1A;
-    unsigned long newHalfWave = (observedTicks / OCR1A) % N_HALF_WAVE;
-    TCNT1 = newTCNT1;
+    TCNT1 = newTCNT1 + compensationTicks;
+    // End of code block for which execution time needs to be compensated
+    unsigned long newHalfWave = ((observedTicks + compensationTicks) / OCR1A) % N_HALF_WAVE;
     iHalfWave = newHalfWave;
 
     // Log experienced phase difference to serial monitor
     if (iGpsPulse % 6 == 0) {
       oldHalfWave = oldHalfWave % N_HALF_WAVE;
-      snprintf(s, S, "LCD phase: %lu %lu %lu %u", iIsr, observedTicks, oldHalfWave, oldTCNT1);
+      snprintf(s, S, "LCD phase: %lu %lu %lu %u", oldIsr, observedTicks, oldHalfWave, oldTCNT1);
       Serial.println(s);
     }
 
