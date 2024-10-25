@@ -49,9 +49,8 @@ The code below implements a state machine with the states described below (based
 #include <arduino.h>
 #include "gps_shutter_control.h"
 
-// Values in this section may be edited by the user
-const int SHUT_PERCENTAGE = 20;                       // Percentage of time that the LCD shutter receives a voltage (in range [15, 70])
-int ocr1aShut;                                        // Precalculated timer value based on SHUT_PERCENTAGE and auto-calibration
+int shutPercentage;                                   // Set to value passed to setup_shutter_control()
+int ocr1aShut;                                        // Precalculated timer value based on shutPercentage and auto-calibration
 int ocr1aOpen;                                        //       ,,        ,,    ,,    ,,          ,,                  ,,
 
 // Values below depend on applied hardware and should not be changed
@@ -78,6 +77,7 @@ volatile unsigned long lastGpsMicros;                 // Set by the gpsIn interr
 unsigned long iGpsPulse = -1;                         // Number of successive GPS pulse intervals counted for stabilization and calibration
 unsigned long prevGpsMicros;                          // For checking timely arrival of current iGpsPulse
 unsigned long gpsStartMicros;                         // Start time of a sequence of successive GPS pulses
+
 volatile unsigned long iHalfWave = 0;                 // Phase of shutter waveform in terms of block half waves
 volatile unsigned long iIsr = 0;                      // For monitoring
 float calibratedFreq = 1000000. * MCU_MHZ;            // Optionally set to a logged value from a previous session
@@ -127,7 +127,7 @@ ISR(TIMER1_COMPA_vect)
   }
   PORTD = pinVals;
 
-  // Alternate the "shut" and "open" timer compare values to realize the set SHUT_PERCENTAGE
+  // Alternate the "shut" and "open" timer compare values to realize the set shutPercentage
   if (iHalfWave % 2 == 0) {
     OCR1A = ocr1aShut;
   } else {
@@ -145,7 +145,7 @@ void calibrate(unsigned nPulse, unsigned long calibrationMicros)
   // too high rather than slightly too low and the syncing occurs during the blanking period
   calibratedFreq = MCU_MHZ * calibrationMicros / nPulse;
   unsigned int ocr1a = calibratedFreq / PRESCALER / N_HALF_WAVE - TIMER_SAFETY;
-  ocr1aShut = ocr1a * SHUT_PERCENTAGE / (long) 100;     // (long) typecast prevents integer overflow
+  ocr1aShut = ocr1a * shutPercentage / (long) 100;     // (long) typecast prevents integer overflow
   ocr1aOpen = ocr1a - ocr1aShut;
   snprintf(s, S, "Micros: %u %lu", iGpsPulse, calibrationMicros);
   Serial.println(s);
@@ -158,15 +158,9 @@ void calibrate(unsigned nPulse, unsigned long calibrationMicros)
 // Will not do; change to Nucleo-32 STM32G431 with crystal clock and 32-bit hardware timers
 }
 
-void setup_shutter_control()
+void setup_shutter_control(int dutyCycle)
 {
-  // Assert valid value of SHUT_PERCENTAGE
-  if ( (SHUT_PERCENTAGE < 15) || (SHUT_PERCENTAGE > 70) ) {
-    Serial.println("Invalid SHUT_PERCENTAGE");
-    while (true) {
-      delay(1000);
-    }
-  }
+  shutPercentage = dutyCycle;
 
   // PIN I/O configs
   attachInterrupt(digitalPinToInterrupt(PIN_GPS), gpsIn, RISING);
@@ -183,7 +177,7 @@ void setup_shutter_control()
   TCNT1 = 0;                                                        // TIMER1 counter start value
   calibrate(1, 1000000L);                                           // set initial TIMER1 compare values assuming zero phase difference
 
-  lastTaskWarningMillis = millis() - 3600000;                       // No warning during the past hour
+  lastTaskWarningMillis = millis() - 3600000;                       // Force warning at start if necessary
   snprintf(s, S, "Waveform-H-bridge version: %s", VERSION);
   Serial.println(s);
   snprintf(s, S, "Electrical blocking percentage: %u%%", 50);
@@ -268,9 +262,9 @@ void run_shutter_control()
   }
 
   // Check behaviour of other tasks in the waveform.ino loop() function
-  if (micros() - lastGpsMicros > 50000 && millis() - lastTaskWarningMillis > 3600000) {
+  if (micros() - lastGpsMicros > 20000 && millis() - lastTaskWarningMillis > 3600000) {
     lastTaskWarningMillis = millis();
-    Serial.println("WARN - tasks other than LCD shutter control take longer than 50 ms!");
+    Serial.println("WARN - tasks other than LCD shutter control take longer than 20 ms!");
   }
 
   // Prepare for next 1 Hz GPS pulse
