@@ -12,19 +12,20 @@ Most likely you use Microsoft Windows and you can simply install the Arduino IDE
 
 The latest software for the GPS-controlled LCD shutter driver can be downloaded from:
 
-[https://github.com/hadoopmarc/gps-controlled-lcd-shutter/archive/refs/heads/main.zip](https://github.com/hadoopmarc/gps-controlled-lcd-shutter/archive/refs/heads/main.zip)
+[https://github.com/hadoopmarc/gps-controlled-lcd-shutter/tags](https://github.com/hadoopmarc/gps-controlled-lcd-shutter/tags)
 
-Extract the archive at some place where it can easily be found back. Of course, if you know how to use git and want to contribute to the repository, you can git clone the repository instead of donwloading the archive.
+Select the version you need, supposedly the latest version, download the source code archive and extract it at some place where it can easily be found back. Of course, if you know how to use git and want to contribute to the repository, you can git clone the repository instead of downloading the archive.
 
 ## Programming the Arduino
 
 Programming the Arduino Nano should now be so simple as:
 
 1. connect the Arduino to your PC/laptop using a USB-cable
-2. open the local file 'gps-controlled-lcd-shutter/arduino/waveform-h-bridge/waveform-h-bridge.ino' with the Arduino IDE. This will open three files in separate tabs. The file gps_shutter_control.cpp contains the actual program. The two other files prepare the Arduino for later extensions.
-3. select the Arduino Nano from the "Tools / Board / Arduino AVR boards" menu option
-4. select the right COM-port from the "Tools / Port" menu option (if no COM port is marked as Arduino Nano, disconnect and reconnect the Arduino to discover the right COM port)
-5. push the "Upload ->" button in the taskbar. If the compilation fails, please contact the repository owner. If the upload fails, disconnect and reconnect the Arduino and try again.
+1. open the local file 'gps-controlled-lcd-shutter/arduino/waveform-h-bridge/waveform-h-bridge.ino' with the Arduino IDE. This will open three files in separate tabs. The file gps_shutter_control.cpp contains the actual program. The two other files prepare the Arduino for later extensions.
+1. in the file 'waveform-h-bridge.ino' manually edit the required SHUT_PERCENTAGE for the connected LCD-shutter system
+1. select the Arduino Nano from the "Tools / Board / Arduino AVR boards" menu option
+1. select the right COM-port from the "Tools / Port" menu option (if no COM port is marked as Arduino Nano, disconnect and reconnect the Arduino to discover the right COM port)
+1. push the "Upload ->" button in the taskbar. If the compilation fails, please contact the repository owner. If the upload fails, disconnect and reconnect the Arduino and try again.
 
 The microcontroller on an Arduino board may have so-called [lock bits](https://microchip.my.site.com/s/article/Use-of-Lock-Bits-in-AVR-devices)or [fuses](https://circuitdigest.com/microcontroller-projects/understanding-fuse-bits-in-atmega328p-to-enhance-arduino-programming-skills) set such that it cannot be programmed with the Arduino IDE anymore. The lockbits can be reset by following the [Arduino bootloader burning procedure](https://docs.arduino.cc/built-in-examples/arduino-isp/ArduinoISP/#recap-burn-the-bootloader-in-8-steps). Resetting fuses requires 12V programming with a [more convoluted setup](https://www.instructables.com/HV-Rescue-Simple/) and is totally impractical for an Arduino Nano with a soldered SMD microcontroller.
 
@@ -33,7 +34,9 @@ The microcontroller on an Arduino board may have so-called [lock bits](https://m
 Once the uploaded program runs, it produces log statements over the serial interface. You can check these by opening the serial monitor of the Arduino IDE (far right button on the taskbar). On powering up the PCB, the GPS-module needs about half a minute to lock on one or more satellites and after that the LCD shutter program needs 10 GPS pulses before generating the second markers in the driver output towards the LCD shutter. During that time the serial monitor only shows:
 
 ```log
-    Configuration of LCD shutter completed.
+    Waveform-H-bridge version: 0.x.y
+    Electrical blocking percentage: 50%
+    Configuration completed
     Stabilizing...
 ```
 After this, the serial monitor shows a few log lines related to the preliminary calibration of the CPU clock frequency relative to the Pulse Per Second (PPS) signal from the GPS module. These lines have the following format:
@@ -55,12 +58,20 @@ In addition to the calibration every minute, the serial monitor shows the phase 
     LCD phase: 0 4 0 12
 ```
 
-These are variables used in synchronizing the timer outputs derived from the MCU clock with the GPS PPS signal. The first and third number should be zero and the second number should be small, indicating that synchronization takes place immediately after the incoming GPS pulse. The difference between the fourth and the second number is the accumulated phase differerence during one second in "ticks" of 4 microseconds, just before synchronization happens. This should be a figure between 0 and 32 ticks (meaning between 0 and 128 microseconds). Only the very first log line shows a large phase difference, because the driver pulse train was not synchronized to the GPS signal before that time.
+These are variables used in synchronizing the timer outputs derived from the MCU clock with the GPS PPS signal. The successive variable on a log line are, just before synchronization starts:
+
+1. iIsr, the number of timer interrupts (0-31) since a GPS pulse
+1. observedTicks, the number of timer ticks of 4 microsecond
+1. oldHalfWave, the index in the range of pulse train parts (0-31) relative to the previous synchronization
+1. oldTCNT1, the value of the timer that drives the start of switching to the next part of the pulse train
+
+During stable operation, iIsr and oldHalfwave should be zero and observedTicks should be small, indicating that synchronization takes place immediately after the incoming GPS pulse. The difference between oldTCNT1 and observedTicks is the accumulated phase differerence during one second in "ticks" of 4 microseconds. This should be a figure between 0 and 32 ticks (meaning between 0 and 128 microseconds). In the example log lines above, only the first line shows a large phase difference, because the driver pulse train was not synchronized to the GPS signal before that time.
 
 The logging described above is the logging during normal operation. There are two additional log messages that can occur and they indicate possible failures in the system:
 
 1. "Unexpected GPS pulse arrival. Deviation: 21432 microseconds". This indicates instable operation of the GPS module. This can have all kinds of causes, including a too weak GPS signal, an instable power supply, interference from other systems, hardware failure, etc.
-2. "Avoidance triggered". This indicates that synchronization starts before the pulse train of the previous second has finished. Possible causes are a bug in the Arduino script and a hardware failure of the Arduino module.
+1. "Avoidance triggered". This indicates that synchronization starts before the pulse train of the previous second has finished. Possible causes are fast changes in the environment temperature and a hardware failure of the Arduino module.
+Fast changes in temperature can be forced by blowing a hair dryer at the Arduino module. Blowing the dryer makes the MCU clock slow down and the pulse train of the previous GPS pulse train is not completed before the next GPS pulse arrives, resulting in an iISR==1. Blowing the dryer longer, one can even enter the state where the phase compensation has detected the arrival of a new GPS pulse before the old pulse train has completed: this triggers the avoidance warning message.
 
 ## Bootloader burning on Arduino
 
