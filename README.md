@@ -69,7 +69,7 @@ In this image the yellow line represents the light throughput of the LCD shutter
 
 ![](doc/image/Arduino@H-bridge-LED.png)
 
-Again the light throughput against the GPS Pulse Per Second signal, but now for the optimized design with Neo-M8N, an Arduino and an H-bridge. Now, the GPS pulse has a duration of 100 ms and the duty cycle of the driver pulses is 50%, which gives the LCD-shutter more time to open than in the earlier image for the reference design.
+Again the light throughput against the GPS Pulse Per Second signal, but now for the optimized design with a Neo-M8N GPS module, an Arduino Nano and an H-bridge. Now, the GPS pulse has a duration of 100 ms and the duty cycle of the driver pulses is 50%, which gives the LCD-shutter more time to open than in the earlier image for the reference design.
 
 ![](doc/image/Arduino-PB7-vs-signal-F.png)
 
@@ -78,6 +78,10 @@ This picture looks boring, but its significance is high. It displays the referen
 ![](doc/image/Arduino-photo-vs-signal-F.png)
 
 This picture is a more attractive-looking variation on the picture above, again combining measurements from two independently operating setups. Here, signal F from the reference design (white line) is combined with the light throughput of the LCD shutter driven by the optimized design (yellow line). Also, here the opening and closing instances of the LCD-shutter nicely coincide with the falling and rising edges of signal F. Note that the measurements in the last two images were made with the electronic circuits built on a printed circuit board, while previous more noisy images were from circuits built on a breadboard. Also, a different phototransistor and LCD-shutter were used, explaining the slightly different light throughput curve, compared to the earlier images.
+
+![](doc/image/Arduino@H-bridge-LED-25percent.png)
+
+Starting from version 0.2.0 the electrical shut percentage can be configured to compensate for LCD shutters that fail to reopen fast enough to truthfully follow the electrical signals. In this oscilloscope screenshot a shut percentage of 25% is applied to a cheap LCD shutter, resulting in an open/closed ratio of roughly 50/50. White line is the GPS signal.
 
 ## Phase measurements in the optimized design
 

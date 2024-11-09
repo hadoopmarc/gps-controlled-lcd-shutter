@@ -12,19 +12,20 @@ Most likely you use Microsoft Windows and you can simply install the Arduino IDE
 
 The latest software for the GPS-controlled LCD shutter driver can be downloaded from:
 
-[https://github.com/hadoopmarc/gps-controlled-lcd-shutter/archive/refs/heads/main.zip](https://github.com/hadoopmarc/gps-controlled-lcd-shutter/archive/refs/heads/main.zip)
+[https://github.com/hadoopmarc/gps-controlled-lcd-shutter/tags](https://github.com/hadoopmarc/gps-controlled-lcd-shutter/tags)
 
-Extract the archive at some place where it can easily be found back. Of course, if you know how to use git and want to contribute to the repository, you can git clone the repository instead of donwloading the archive.
+Select the version you need, supposedly the latest version, download the source code archive and extract it at some place where it can easily be found back. Of course, if you know how to use git and want to contribute to the repository, you can git clone the repository instead of downloading the archive.
 
 ## Programming the Arduino
 
 Programming the Arduino Nano should now be so simple as:
 
 1. connect the Arduino to your PC/laptop using a USB-cable
-2. open the local file 'gps-controlled-lcd-shutter/arduino/waveform-h-bridge/waveform-h-bridge.ino' with the Arduino IDE. This will open three files in separate tabs. The file gps_shutter_control.cpp contains the actual program. The two other files prepare the Arduino for later extensions.
-3. select the Arduino Nano from the "Tools / Board / Arduino AVR boards" menu option
-4. select the right COM-port from the "Tools / Port" menu option (if no COM port is marked as Arduino Nano, disconnect and reconnect the Arduino to discover the right COM port)
-5. push the "Upload ->" button in the taskbar. If the compilation fails, please contact the repository owner. If the upload fails, disconnect and reconnect the Arduino and try again.
+1. open the local file 'gps-controlled-lcd-shutter/arduino/waveform-h-bridge/waveform-h-bridge.ino' with the Arduino IDE. This will open three files in separate tabs. The file gps_shutter_control.cpp contains the actual program. The two other files prepare the Arduino for later extensions.
+1. in the file 'waveform-h-bridge.ino' manually edit the required SHUT_PERCENTAGE for the connected LCD-shutter system
+1. select the Arduino Nano from the "Tools / Board / Arduino AVR boards" menu option
+1. select the right COM-port from the "Tools / Port" menu option (if no COM port is marked as Arduino Nano, disconnect and reconnect the Arduino to discover the right COM port)
+1. push the "Upload ->" button in the taskbar. If the compilation fails, please contact the repository owner. If the upload fails, disconnect and reconnect the Arduino and try again.
 
 The microcontroller on an Arduino board may have so-called [lock bits](https://microchip.my.site.com/s/article/Use-of-Lock-Bits-in-AVR-devices)or [fuses](https://circuitdigest.com/microcontroller-projects/understanding-fuse-bits-in-atmega328p-to-enhance-arduino-programming-skills) set such that it cannot be programmed with the Arduino IDE anymore. The lockbits can be reset by following the [Arduino bootloader burning procedure](https://docs.arduino.cc/built-in-examples/arduino-isp/ArduinoISP/#recap-burn-the-bootloader-in-8-steps). Resetting fuses requires 12V programming with a [more convoluted setup](https://www.instructables.com/HV-Rescue-Simple/) and is totally impractical for an Arduino Nano with a soldered SMD microcontroller.
 
