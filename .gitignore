@@ -1,6 +1,8 @@
 *.kicad_sch-bak
 *.zip
+*.pdf
 datasheet/**
 presentation/**
 stm32/**
 fp-info-cache
+**/.idea

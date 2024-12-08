@@ -1,0 +1,13 @@
+B+B Thermo-Technik rain sensor -> see datasheet
+
+- keep plug links as the factory setting (with heating on; close the relay when wet conditions occur)
+- use existing 12V power supply, connect using an available contraplug
+- connect REL CO to GND from Arduino
+- connect REL NO to pin D2 from Arduino (programmed as pull-up, see
+  https://docs.arduino.cc/tutorials/generic/digital-input-pullup/)
+
+
+Current 3-wire cable:
+- blue: GND from Arduino to ground and REL CO of rain sensor
+- brown: +12 V from Vin Arduino to rain sensor
+- green/yellow: D2 from Arduino to REL NO of rain sensor
