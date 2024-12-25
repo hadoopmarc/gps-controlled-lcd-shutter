@@ -22,7 +22,8 @@ For wiring on Arduino Uno, also see:
 
 // SD_FAT_TYPE = 0 for SdFat/File as defined in SdFatConfig.h,
 // 1 for FAT16/FAT32, 2 for exFAT, 3 for FAT16/FAT32 and exFAT.
-#define SD_FAT_TYPE 3
+#define SD_FAT_TYPE 1
+#define USE_LONG_FILE_NAMES 1
 //
 // Set DISABLE_CHIP_SELECT to disable a second SPI device.
 // For example, with the Ethernet shield, set DISABLE_CHIP_SELECT
@@ -74,9 +75,9 @@ void clearSerialInput() {
 }
 
 void reformatMsg() {
-  cout << F("Try reformatting the card.  For best results use\n");
-  cout << F("the SdFormatter program in SdFat/examples or download\n");
-  cout << F("and use SDFormatter from www.sdcard.org/downloads.\n");
+  // cout << F("Try reformatting the card.  For best results use\n");
+  // cout << F("the SdFormatter program in SdFat/examples or download\n");
+  // cout << F("and use SDFormatter from www.sdcard.org/downloads.\n");
 }
 
 void setup() {
@@ -189,11 +190,13 @@ void loop() {
   // MdL insert creation of file
   // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
   FsFile testfile;
+  delay(2000);
   testfile.open("arduino/very-very-long-filename.txt", O_WRONLY | O_CREAT | O_TRUNC);
   testfile.write( "See if this works!");
   testfile.close();
 
   cout << F("Files found (date time size name):\n");
+  delay(2000);
   sd.ls(LS_R | LS_DATE | LS_SIZE);
 
   if ((sizeMB > 1100 && sd.vol()->sectorsPerCluster() < 64) ||

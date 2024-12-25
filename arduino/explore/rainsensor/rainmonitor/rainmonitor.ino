@@ -4,12 +4,14 @@
  */
 #include <TimeLib.h>
 
+const int rainPin = 6;
+
 void setup() {
   Serial.begin(9600);
   setTime(20,55,0,21,10,2024);  // Edit before upload/start
 
-  // configure pin D2 as an input and enable the internal pull-up resistor
-  pinMode(2, INPUT_PULLUP);  // REL NO (green); REL CO to ground (brown)
+  // configure pin D6 as an input and enable the internal pull-up resistor
+  pinMode(rainPin, INPUT_PULLUP);  // REL NO (green); REL CO to ground (brown)
 }
 
 void loop() {
@@ -22,7 +24,7 @@ void loop() {
   Serial.print(s);
   // Input LOW means:  sensor relay closed -> wet conditions
   // Input HIGH means: sensor relay open -> dry conditions
-  int sensorVal = digitalRead(2);
+  int sensorVal = digitalRead(rainPin);
 
   if (sensorVal == HIGH) {
     Serial.println("Dry");
