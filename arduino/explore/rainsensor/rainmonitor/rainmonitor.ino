@@ -36,7 +36,7 @@ void setup() {
   if (setTimeWithGPS()) {
     Serial.println("Failure reading data from GPS");
   }
-  delay(1000);
+  SdFile::dateTimeCallback(populateDateTime);
   createFile("geen_metingen2.csv");
 }
 
@@ -146,8 +146,6 @@ bool setTimeWithGPS() {
 void createFile(char *filename)
 {
   SdFat32 sd;
-  SdFile sdf;
-  sdf.dateTimeCallback(populateDateTime);
   sd.begin(chipSelect, SPI_SPEED);
   File32 testfile;
   // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
