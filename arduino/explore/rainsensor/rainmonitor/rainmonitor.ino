@@ -33,10 +33,12 @@ uint8_t iMeasure = 0;                   // Current measurement to be made
 uint8_t actionSeconds[nMeasure];        // Used to detect next masurement instance
 bool isWet[nMeasure];                   // Measured values from the past minute
 
+const int S = 90;
+char s[S];
+
 
 void setup() {
   Serial.begin(9600);
-  // delay(1000);
 
   // configure pin D6 as an input and enable the internal pull-up resistor
   // https://docs.arduino.cc/tutorials/generic/digital-input-pullup/)
@@ -67,9 +69,6 @@ void setup() {
 }
 
 void loop() {
-  int S = 90;
-  char s[S];
-
   time_t t = now();
 
   // Measure
@@ -117,7 +116,8 @@ bool setTimeWithGPS() {
   gpsSerial.println(F("$PUBX,40,GSA,0,0,0,0*4E"));  // GSA OFF
   gpsSerial.println(F("$PUBX,40,GSV,0,0,0,0*59"));  // GSV OFF
   gpsSerial.println(F("$PUBX,40,GLL,0,0,0,0*5C"));  // GLL OFF
-  delay(2000);                                      // wait for message completion
+  delay(2000);                                      // wait for complete GNRMC message
+
   // Displays GNRMC messages with time in UTC, see:
   //     https://logiqx.github.io/gps-wizard/nmea/messages/rmc.html
   // Steps:
@@ -130,16 +130,15 @@ bool setTimeWithGPS() {
   String gpsDate = "000000";
   char current;
   bool lineStarted = false;
-  int iComma = 0;
+  int iComma;
   int iCopy;
   while (gpsSerial.available() > 0) {
     current = gpsSerial.read();
-    delay(10);                  // Needed to read reliably and not too fast
+    delay(1);                   // Do not read too fast
     if (!lineStarted) {
       if (current == '\r') {
-        if (gpsSerial.available() > 0 && gpsSerial.read() == '\n') {
-          lineStarted = true;
-        }
+        lineStarted = true;
+        iComma = 0;
         continue;
       }
     }
