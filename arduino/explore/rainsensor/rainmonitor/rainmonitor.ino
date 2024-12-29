@@ -18,26 +18,52 @@
 #define SPI_SPEED SD_SCK_MHZ(4)         // Should be max 50 MHz
 
 const int8_t DISABLE_CHIP_SELECT = -1;  // Assume no other SPI devices present
+
 // The LCD shutter PCB connects the Arduino pins to the RX/TX pins of the GPS module
 const uint8_t RXPin = 10;               // Hardware connection on LCD shutter PCB
 const uint8_t TXPin = 9;                // Hardware connection on LCD shutter PCB
 const uint8_t chipSelect = 5;           // Hardware connection on LCD shutter PCB
 const uint8_t rainPin = 6;              // Hardware connection on rainsensor shield
 
+// Variables related to the measurement logic
+uint8_t actionMinute;                   // Used to to detect next minute cycle
+bool started = false;                   // Becomes true after first whole minute detection
+const uint8_t nMeasure = 10;            // Number of measurements per minute
+uint8_t iMeasure = 0;                   // Current measurement to be made
+uint8_t actionSeconds[nMeasure];        // Used to detect next masurement instance
+bool isWet[nMeasure];                   // Measured values from the past minute
+
 
 void setup() {
   Serial.begin(9600);
+  // delay(1000);
 
   // configure pin D6 as an input and enable the internal pull-up resistor
   // https://docs.arduino.cc/tutorials/generic/digital-input-pullup/)
   pinMode(rainPin, INPUT_PULLUP);
 
+  // Precalculate actionMinutes
+  for (int i=0; i<nMeasure; i++) {
+    actionSeconds[i] = (i + 1) * 59 / nMeasure;
+  }
+
   // Synchronize internal clock with GPS time
+  // ToDo: should be done once per day for prolonged measurements
   if (setTimeWithGPS()) {
     Serial.println("Failure reading data from GPS");
   }
   SdFile::dateTimeCallback(populateDateTime);
   createFile("geen_metingen2.csv");
+  time_t t = now();
+  uint8_t waitMinutes;
+  if (second(t) < 59) {
+    waitMinutes = 1;
+  } else {               // avoid race condition
+    delay(1000);
+    waitMinutes = 2;
+  }
+  actionMinute = (minute(t) + waitMinutes) % 60;
+  Serial.println("Measuring started");
 }
 
 void loop() {
@@ -45,20 +71,31 @@ void loop() {
   char s[S];
 
   time_t t = now();
-  snprintf(s, S, "%4d-%02d-%02d %02d:%02d:%02d ",
-    year(t), month(t), day(t), hour(t), minute(t), second(t));
-  Serial.print(s);
-  // Input LOW means:  sensor relay closed -> wet conditions
-  // Input HIGH means: sensor relay open -> dry conditions
-  int sensorVal = digitalRead(rainPin);
 
-  if (sensorVal == HIGH) {
-    Serial.println("Dry");
-  } else {
-    Serial.println("Wet");
+  // Measure
+  if (second(t) == actionSeconds[iMeasure]) {
+    // Input LOW means:  sensor relay closed -> wet conditions -> need ~LOW
+    // Input HIGH means: sensor relay open -> dry conditions -> need ~HIGH
+    isWet[iMeasure] = !digitalRead(rainPin);
+    Serial.print(".");
+    iMeasure++;
   }
 
-  delay(10000);
+  // Process past measurements at the start of a minute
+  if (minute(t) == actionMinute) {
+    actionMinute = (actionMinute + 1) % 60;
+    if (iMeasure == nMeasure) {
+      snprintf(s, S, "\n%4d-%02d-%02d %02d:%02d:%02d ",
+        year(t), month(t), day(t), hour(t), minute(t), second(t));
+      Serial.print(s);
+      for (int i=0; i < nMeasure; i++) {
+        snprintf(s, S, "%d", isWet[i]);
+        Serial.print(s);
+      }
+      Serial.println("");
+    }
+    iMeasure = 0;
+  }
 }
 
 bool setTimeWithGPS() {
@@ -80,7 +117,7 @@ bool setTimeWithGPS() {
   gpsSerial.println(F("$PUBX,40,GSA,0,0,0,0*4E"));  // GSA OFF
   gpsSerial.println(F("$PUBX,40,GSV,0,0,0,0*59"));  // GSV OFF
   gpsSerial.println(F("$PUBX,40,GLL,0,0,0,0*5C"));  // GLL OFF
-  delay(5000);                                      // wait for message completion
+  delay(2000);                                      // wait for message completion
   // Displays GNRMC messages with time in UTC, see:
   //     https://logiqx.github.io/gps-wizard/nmea/messages/rmc.html
   // Steps:
@@ -97,6 +134,7 @@ bool setTimeWithGPS() {
   int iCopy;
   while (gpsSerial.available() > 0) {
     current = gpsSerial.read();
+    delay(10);                  // Needed to read reliably and not too fast
     if (!lineStarted) {
       if (current == '\r') {
         if (gpsSerial.available() > 0 && gpsSerial.read() == '\n') {
@@ -126,9 +164,7 @@ bool setTimeWithGPS() {
     }
   }
   gpsSerial.end();
-  Serial.println(iCopy);
-  Serial.println(gpsDate);
-  Serial.println(gpsTime);
+  Serial.println("\n" + gpsDate + " " + gpsTime);
   if (iCopy != 6) {
     return 1;
   }
