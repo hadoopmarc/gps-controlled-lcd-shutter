@@ -15,7 +15,9 @@
 #include <SPI.h>
 #include <TimeLib.h>                    // https://github.com/PaulStoffregen/Time
 
-#define SPI_SPEED SD_SCK_MHZ(4)         // Should be max 50 MHz
+#define SD_FAT_TYPE 1                   // For FAT16/FAT32
+#define USE_LONG_FILE_NAMES 1
+#define SPI_SPEED SD_SCK_MHZ(4)         // Can be max 50 MHz
 
 const int8_t DISABLE_CHIP_SELECT = -1;  // Assume no other SPI devices present
 
@@ -26,16 +28,26 @@ const uint8_t chipSelect = 5;           // Hardware connection on LCD shutter PC
 const uint8_t rainPin = 6;              // Hardware connection on rainsensor shield
 
 // Variables related to the measurement logic
-uint8_t actionMinute;                   // Used to to detect next minute cycle
+uint8_t actionMinute;                   // Used to detect next minute cycle
+uint8_t actionHour;                     // Used to detect next instance for GPS syncing
 bool started = false;                   // Becomes true after first whole minute detection
 const uint8_t nMeasure = 10;            // Number of measurements per minute
 uint8_t iMeasure = 0;                   // Current measurement to be made
 uint8_t actionSeconds[nMeasure];        // Used to detect next masurement instance
 bool isWet[nMeasure];                   // Measured values from the past minute
 
-const int S = 90;
-char s[S];
+String logFolder = "arduino";
+String logFile = "";                    // "lat-lon-yymmdd.csv"
+SdFat32 sd;
+File32 testfile;
 
+// void test_charops() {                // Probably more code-efficient than the String class
+//   char t1[40] = "Hiep";
+//   char t2[40] = "Hoi";
+//   Serial.println(t1);
+//   strcat(t1, t2);
+//   Serial.println(t1);
+// }
 
 void setup() {
   Serial.begin(9600);
@@ -50,12 +62,9 @@ void setup() {
   }
 
   // Synchronize internal clock with GPS time
-  // ToDo: should be done once per day for prolonged measurements
-  if (setTimeWithGPS()) {
-    Serial.println("Failure reading data from GPS");
-  }
+  logFile = setTimeWithGPS();
   SdFile::dateTimeCallback(populateDateTime);
-  createFile("geen_metingen2.csv");
+  createFile(logFolder, logFile);
   time_t t = now();
   uint8_t waitMinutes;
   if (second(t) < 59) {
@@ -65,8 +74,9 @@ void setup() {
     waitMinutes = 2;
   }
   actionMinute = (minute(t) + waitMinutes) % 60;
-  Serial.println("Measuring started");
+  Serial.println(F("Measuring started"));
 }
+
 
 void loop() {
   time_t t = now();
@@ -84,20 +94,26 @@ void loop() {
   if (minute(t) == actionMinute) {
     actionMinute = (actionMinute + 1) % 60;
     if (iMeasure == nMeasure) {
-      snprintf(s, S, "\n%4d-%02d-%02d %02d:%02d:%02d ",
+      char str[40];
+      snprintf(str, 40, "\n%4d-%02d-%02d %02d:%02d:%02d ",
         year(t), month(t), day(t), hour(t), minute(t), second(t));
-      Serial.print(s);
+      String line = String(str);
       for (int i=0; i < nMeasure; i++) {
-        snprintf(s, S, "%d", isWet[i]);
-        Serial.print(s);
+        line += (int)isWet[i];
       }
-      Serial.println("");
+      line += "\n";
+      Serial.print(line);
+      writeFile(logFile, line);
     }
     iMeasure = 0;
   }
+
+  if (hour(t) == actionHour) {
+    setTimeWithGPS();
+  }
 }
 
-bool setTimeWithGPS() {
+String setTimeWithGPS() {
   /*
    * Only call this function at daytime when accurate LCD shutter control is not required
    *
@@ -110,42 +126,51 @@ bool setTimeWithGPS() {
   gpsSerial.begin(9600);                            // Default baudrate of NEO GPS modules
 
   // Quiet unnecessary messages before the first second has passed
-  // ToDo: removing F macro puts strings in RAM rather than flash. Use print formatting.
   gpsSerial.println(F("$PUBX,40,VTG,0,0,0,0*5E"));  // VTG OFF
   gpsSerial.println(F("$PUBX,40,GGA,0,0,0,0*5A"));  // GGA OFF
   gpsSerial.println(F("$PUBX,40,GSA,0,0,0,0*4E"));  // GSA OFF
   gpsSerial.println(F("$PUBX,40,GSV,0,0,0,0*59"));  // GSV OFF
   gpsSerial.println(F("$PUBX,40,GLL,0,0,0,0*5C"));  // GLL OFF
-  delay(2000);                                      // wait for complete GNRMC message
+  while (gpsSerial.available()) {}                  // Clear buffer
+
+  // delay(2000);                                   // Wait for complete GNRMC message
+  // int i = 0;
+  // while (gpsSerial.available() && i < 200) {
+  //   char c = gpsSerial.read();
+  //   Serial.print(c);
+  // }
+  // Serial.println();
+  // while (!gpsSerial.available()) {}
 
   // Displays GNRMC messages with time in UTC, see:
   //     https://logiqx.github.io/gps-wizard/nmea/messages/rmc.html
   // Steps:
-  // - loop until <CR><LF> alias '\r''\n'
+  // - loop until '$'
   // - loop until the first ','
   // - assign the next 6 bytes to the gpsTime char array
   // - loop until the ninth ','
   // - assign the next 6 bytes to the gpsDate char array
+  // - analogously for latitude and longitude
   String gpsTime = "000000";
   String gpsDate = "000000";
+  String latitude = "0000";                         // ddmm  North/South not read
+  String longitude = "00000";                       // dddmm  East/West not read
   char current;
   bool lineStarted = false;
   int iComma;
   int iCopy;
+  while (!gpsSerial.available()) {}                 // Wait for start of GNRMC message
   while (gpsSerial.available() > 0) {
     current = gpsSerial.read();
-    delay(1);                   // Do not read too fast
+    delay(5);                                       // Do not read too fast
     if (!lineStarted) {
-      if (current == '\r') {
+      if (current == '$') {
         lineStarted = true;
         iComma = 0;
-        continue;
       }
+      continue;
     }
     if (current == ',') {
-      if (iComma == 1 && iCopy != 6) {
-        return 1;
-      }
       iComma++;
       iCopy = 0;
       continue;
@@ -154,43 +179,50 @@ bool setTimeWithGPS() {
       gpsTime.setCharAt(iCopy, current);
       iCopy++;
     }
+    if (iComma == 3 && iCopy < 4) {
+      latitude.setCharAt(iCopy, current);
+      iCopy++;
+    }
+    if (iComma == 5 && iCopy < 5) {
+      longitude.setCharAt(iCopy, current);
+      iCopy++;
+    }
     if (iComma == 9) {
       gpsDate.setCharAt(iCopy, current);
       iCopy++;
       if (iCopy == 6) {
-        break;  // parsing of time and date completed
+        break;                                      // Parsing completed
       }
     }
   }
+  char space = ' ';
   gpsSerial.end();
-  Serial.println("\n" + gpsDate + " " + gpsTime);
-  if (iCopy != 6) {
-    return 1;
-  }
+  Serial.print('\n');
+  Serial.print(latitude);
+  Serial.print(space);
+  Serial.print(longitude);
+  Serial.print(space);
+  Serial.print(gpsDate);
+  Serial.print(space);
+  Serial.println(gpsTime);
+  actionHour = (uint8_t)(gpsTime.substring(0, 2).toInt());
   setTime(
-    gpsTime.substring(0, 2).toInt(),
+    actionHour,
     gpsTime.substring(2, 4).toInt(),
     gpsTime.substring(4, 6).toInt(),
     gpsDate.substring(0, 2).toInt(),
     gpsDate.substring(2, 4).toInt(),
     gpsDate.substring(4, 6).toInt() + 2000
   );
-  return 0;
-}
-
-void createFile(char *filename)
-{
-  SdFat32 sd;
-  sd.begin(chipSelect, SPI_SPEED);
-  File32 testfile;
-  // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
-  testfile.open(filename, O_WRONLY | O_CREAT | O_TRUNC);
-  testfile.write( "See if this works!");
-  testfile.close();
-
-  Serial.println("Files found (date time size name):");
-  sd.ls(LS_R | LS_DATE | LS_SIZE);
-  sd.end();
+  actionHour = (actionHour + 1) % 24;
+  if (logFile == "") {
+    logFile = logFolder + "/" + latitude + "-" + longitude + "-"
+      + gpsDate.substring(4, 6) + gpsDate.substring(2, 4) + gpsDate.substring(0, 2)
+      + ".csv";
+    Serial.print("Logfile: ");
+    Serial.println(logFile);
+  }
+  return logFile;
 }
 
 void populateDateTime(uint16_t* date, uint16_t* time) {
@@ -198,4 +230,22 @@ void populateDateTime(uint16_t* date, uint16_t* time) {
   time_t t = now();
   *date = FS_DATE(year(t), month(t), day(t));
   *time = FS_TIME(hour(t), minute(t), second(t));
+}
+
+void createFile(String folder, String filename) {
+  // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
+  sd.begin(chipSelect, SPI_SPEED);
+  sd.mkdir(folder.c_str());
+  sd.ls(LS_R | LS_DATE | LS_SIZE);
+  testfile.open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+  testfile.close();
+  sd.end();
+}
+
+void writeFile(String filename, String line) {
+  sd.begin(chipSelect, SPI_SPEED);
+  testfile.open(filename.c_str(), O_WRONLY | O_APPEND);
+  testfile.write(line.c_str());
+  testfile.close();
+  sd.end();
 }

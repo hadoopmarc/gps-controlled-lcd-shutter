@@ -2,7 +2,7 @@
 
 Copied from:
     https://github.com/greiman/SdFat/blob/2.2.3/examples/QuickStart/QuickStart.ino
- 
+
 SD card attached to SPI bus as follows:
  ** MOSI - digital pin 11 on Arduino Uno/Duemilanove/Diecimila
  ** MISO - digital pin 12 on Arduino Uno/Duemilanove/Diecimila
@@ -189,7 +189,7 @@ void loop() {
 
   // MdL insert creation of file
   // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
-  FsFile testfile;
+  File32 testfile;
   delay(2000);
   testfile.open("arduino/very-very-long-filename.txt", O_WRONLY | O_CREAT | O_TRUNC);
   testfile.write( "See if this works!");
