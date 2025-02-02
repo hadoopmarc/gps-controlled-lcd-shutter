@@ -1,35 +1,45 @@
 /* 
  * Simple rain monitor using a B+B Thermo-Technik 2020 version rain sensor
  *
- * Sensor box has plug links as the factory setting
- * (with heating on; close the relay when wet conditions occur)
+ * Sensor box has default factory settings for the internal jumpers ("plug links")
+ * (heating on; close the relay when wet conditions occur)
  *
- * Current 3-wire cable:
+ * Connections with 3-wire cable:
  * - blue: GND from Arduino to ground and REL CO of rain sensor
  * - brown: +12 V from Vin Arduino to rain sensor
  * - green/yellow: D2 from Arduino to REL NO of rain sensor
  */
+// Time Keeping
+// - gpsSerial gives current date and time; set calibrationDate and currentTime
+// - gpsIn gives second pulses; increment currentTime
+// - date and time are needed for the populateDatetime callback of SdFat
+// - date and time are needed for writing log lines; date and time functions from SdFast
+//   are not easily reused.
 #include <SdFat.h>
 #include <sdios.h>
 #include <SoftwareSerial.h>
 #include <SPI.h>
-#include <TimeLib.h>                    // https://github.com/PaulStoffregen/Time
 
 #define SD_FAT_TYPE 1                   // For FAT16/FAT32
-#define USE_LONG_FILE_NAMES 1
+#define USE_LONG_FILE_NAMES 1           // For encoding lat, lon and date
 #define SPI_SPEED SD_SCK_MHZ(4)         // Can be max 50 MHz
-
 const int8_t DISABLE_CHIP_SELECT = -1;  // Assume no other SPI devices present
 
-// The LCD shutter PCB connects the Arduino pins to the RX/TX pins of the GPS module
+// GPS module hardware configs (hardwired on the PCB of the LCD shutter)
+const uint8_t gpsPin = 2;               // Hardware connection on LCD shutter PCB
 const uint8_t RXPin = 10;               // Hardware connection on LCD shutter PCB
 const uint8_t TXPin = 9;                // Hardware connection on LCD shutter PCB
 const uint8_t chipSelect = 5;           // Hardware connection on LCD shutter PCB
-const uint8_t rainPin = 6;              // Hardware connection on rainsensor shield
+
+// Rainsensor hardware configs
+const uint8_t rainPin = 6;              // Hardware connection on the rainsensor shield
+
+// Global variables modified in interrupt routines
+volatile bool gpsHit = false;           // Set by the gpsIn interrupt only and cleared after processing
 
 // Variables related to the measurement logic
+bool isCalibrated;                      // Used to detect if daily date calibration was done
 uint8_t actionMinute;                   // Used to detect next minute cycle
-uint8_t actionHour;                     // Used to detect next instance for GPS syncing
 bool started = false;                   // Becomes true after first whole minute detection
 const uint8_t nMeasure = 10;            // Number of measurements per minute
 uint8_t iMeasure = 0;                   // Current measurement to be made
@@ -38,21 +48,42 @@ bool isWet[nMeasure];                   // Measured values from the past minute
 
 String logFolder = "arduino";
 String logFile = "";                    // "lat-lon-yymmdd.csv"
+SoftwareSerial gpsSerial(RXPin, TXPin);
 SdFat32 sd;
 File32 testfile;
 
-// void test_charops() {                // Probably more code-efficient than the String class
-//   char t1[40] = "Hiep";
-//   char t2[40] = "Hoi";
-//   Serial.println(t1);
-//   strcat(t1, t2);
-//   Serial.println(t1);
-// }
+struct { 
+  uint8_t day;
+  uint8_t month;
+  uint16_t year;                        // Century included
+} calibrationDate;
+
+struct { 
+  uint8_t second;
+  uint8_t minute;
+  uint8_t hour;
+} currentTime;
+
+void incrementTime() {
+  currentTime.second = (currentTime.second + 1) % 60;
+  if (currentTime.second == 0) {
+    currentTime.minute = (currentTime.minute + 1) % 60;
+    if (currentTime.minute == 0) {
+      currentTime.hour = (currentTime.hour + 1) % 24;
+    }
+  }
+}
+
+void gpsIn()
+{
+  gpsHit = true;
+}
 
 void setup() {
-  Serial.begin(9600);
+  // Receive second pulses from GPS
+  attachInterrupt(digitalPinToInterrupt(gpsPin), gpsIn, RISING);
 
-  // configure pin D6 as an input and enable the internal pull-up resistor
+  // configure the conducting rain sensor as an input and enable the internal pull-up resistor
   // https://docs.arduino.cc/tutorials/generic/digital-input-pullup/)
   pinMode(rainPin, INPUT_PULLUP);
 
@@ -61,28 +92,31 @@ void setup() {
     actionSeconds[i] = (i + 1) * 59 / nMeasure;
   }
 
-  // Synchronize internal clock with GPS time
-  logFile = setTimeWithGPS();
-  SdFile::dateTimeCallback(populateDateTime);
+  delay(60000);                // Be sure of GPS fix for logFile and measure times
+  setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
   createFile(logFolder, logFile);
-  time_t t = now();
+
   uint8_t waitMinutes;
-  if (second(t) < 59) {
+  if (currentTime.second < 59) {
     waitMinutes = 1;
   } else {               // avoid race condition
     delay(1000);
     waitMinutes = 2;
   }
-  actionMinute = (minute(t) + waitMinutes) % 60;
+  actionMinute = (currentTime.minute + waitMinutes) % 60;
+  Serial.begin(9600);
   Serial.println(F("Measuring started"));
 }
 
-
 void loop() {
-  time_t t = now();
+  // Keep current time
+  if (gpsHit) {
+    gpsHit = false;
+    incrementTime();
+  }
 
   // Measure
-  if (second(t) == actionSeconds[iMeasure]) {
+  if (currentTime.second == actionSeconds[iMeasure]) {
     // Input LOW means:  sensor relay closed -> wet conditions -> need ~LOW
     // Input HIGH means: sensor relay open -> dry conditions -> need ~HIGH
     isWet[iMeasure] = !digitalRead(rainPin);
@@ -91,38 +125,42 @@ void loop() {
   }
 
   // Process past measurements at the start of a minute
-  if (minute(t) == actionMinute) {
+  if (currentTime.minute == actionMinute) {
     actionMinute = (actionMinute + 1) % 60;
     if (iMeasure == nMeasure) {
       char str[40];
-      snprintf(str, 40, "\n%4d-%02d-%02d %02d:%02d:%02d ",
-        year(t), month(t), day(t), hour(t), minute(t), second(t));
+      snprintf(str, 40, "\n%02d:%02d:%02d ",
+               currentTime.hour, currentTime.minute, currentTime.second);
       String line = String(str);
       for (int i=0; i < nMeasure; i++) {
         line += (int)isWet[i];
       }
-      line += "\n";
-      Serial.print(line);
+      Serial.print(line + "\n");
       writeFile(logFile, line);
     }
     iMeasure = 0;
   }
 
-  if (hour(t) == actionHour) {
-    setTimeWithGPS();
+  // Recalibrate and start new log file at noon or later if not done for the current day
+  if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
+    setGpsDependentVariables();
+    createFile(logFolder, logFile);
+  }
+  if (isCalibrated && currentTime.hour == 0) {    // Prepare for recalibration + logFile creation next noon
+    isCalibrated = false;
   }
 }
 
-String setTimeWithGPS() {
+void setGpsDependentVariables() {
   /*
-   * Only call this function at daytime when accurate LCD shutter control is not required
+   * SoftwareSerial uses the same hardware timer as the LCD shutter control, so only call this
+   * function at daytime when accurate LCD shutter control is not required.
    *
    * Based on:
    * https://lastminuteengineers.com/neo6m-gps-arduino-tutorial/
    * https://forum.arduino.cc/t/configurating-ublox-gps-on-bootup-from-arduino/903699/9
    * https://www.hhhh.org/wiml/proj/nmeaxor.html  NMEA message checksum calculator
    */
-  SoftwareSerial gpsSerial(RXPin, TXPin);
   gpsSerial.begin(9600);                            // Default baudrate of NEO GPS modules
 
   // Quiet unnecessary messages before the first second has passed
@@ -131,16 +169,6 @@ String setTimeWithGPS() {
   gpsSerial.println(F("$PUBX,40,GSA,0,0,0,0*4E"));  // GSA OFF
   gpsSerial.println(F("$PUBX,40,GSV,0,0,0,0*59"));  // GSV OFF
   gpsSerial.println(F("$PUBX,40,GLL,0,0,0,0*5C"));  // GLL OFF
-  while (gpsSerial.available()) {}                  // Clear buffer
-
-  // delay(2000);                                   // Wait for complete GNRMC message
-  // int i = 0;
-  // while (gpsSerial.available() && i < 200) {
-  //   char c = gpsSerial.read();
-  //   Serial.print(c);
-  // }
-  // Serial.println();
-  // while (!gpsSerial.available()) {}
 
   // Displays GNRMC messages with time in UTC, see:
   //     https://logiqx.github.io/gps-wizard/nmea/messages/rmc.html
@@ -151,18 +179,31 @@ String setTimeWithGPS() {
   // - loop until the ninth ','
   // - assign the next 6 bytes to the gpsDate char array
   // - analogously for latitude and longitude
-  String gpsTime = "000000";
-  String gpsDate = "000000";
-  String latitude = "0000";                         // ddmm  North/South not read
-  String longitude = "00000";                       // dddmm  East/West not read
+  //
+  // Reading the 64 byte ring buffer of SoftwareSerial is a bit tricky, see:
+  // https://arduino.stackexchange.com/questions/1726/how-does-the-arduino-handle-serial-buffer-overflow
+  // Basically, doing it right involves the following steps:
+  // - clear the buffer from old data
+  // - loop fast and check every time whether a character is available
+  // - the pace of the 9600 baud serial interface is 1 byte every 1.04 ms
+  char gpsTime[7] = "000000";                       // hhmmss
+  char gpsDate[7] = "000000";                       // ddmmyy
+  char latitude[5] = "0000";                        // ddmm, North/South not read
+  char longitude[6] = "00000";                      // dddmm, East/West not read
   char current;
   bool lineStarted = false;
-  int iComma;
+  int iComma = 0;
   int iCopy;
-  while (!gpsSerial.available()) {}                 // Wait for start of GNRMC message
-  while (gpsSerial.available() > 0) {
-    current = gpsSerial.read();
-    delay(5);                                       // Do not read too fast
+  delay(1100);
+  while (gpsSerial.available()) {                   // Clear buffer from old data
+    gpsSerial.read();
+  }
+  while (true) {
+    if (gpsSerial.available()) {                    // Loop fast until a char is available
+      current = gpsSerial.read();
+    } else {
+      continue;
+    }
     if (!lineStarted) {
       if (current == '$') {
         lineStarted = true;
@@ -176,28 +217,30 @@ String setTimeWithGPS() {
       continue;
     }
     if (iComma == 1 && iCopy < 6) {
-      gpsTime.setCharAt(iCopy, current);
+      gpsTime[iCopy] = current;
       iCopy++;
     }
     if (iComma == 3 && iCopy < 4) {
-      latitude.setCharAt(iCopy, current);
+      latitude[iCopy] = current;
       iCopy++;
     }
     if (iComma == 5 && iCopy < 5) {
-      longitude.setCharAt(iCopy, current);
+      longitude[iCopy] = current;
       iCopy++;
     }
     if (iComma == 9) {
-      gpsDate.setCharAt(iCopy, current);
+      gpsDate[iCopy] = current;
       iCopy++;
       if (iCopy == 6) {
-        break;                                      // Parsing completed
+        break;
       }
     }
   }
   char space = ' ';
   gpsSerial.end();
-  Serial.print('\n');
+  Serial.begin(9600);
+  Serial.print(millis() / 1000);
+  Serial.print(": ");
   Serial.print(latitude);
   Serial.print(space);
   Serial.print(longitude);
@@ -205,31 +248,34 @@ String setTimeWithGPS() {
   Serial.print(gpsDate);
   Serial.print(space);
   Serial.println(gpsTime);
-  actionHour = (uint8_t)(gpsTime.substring(0, 2).toInt());
-  setTime(
-    actionHour,
-    gpsTime.substring(2, 4).toInt(),
-    gpsTime.substring(4, 6).toInt(),
-    gpsDate.substring(0, 2).toInt(),
-    gpsDate.substring(2, 4).toInt(),
-    gpsDate.substring(4, 6).toInt() + 2000
-  );
-  actionHour = (actionHour + 1) % 24;
+  Serial.end();
+
   if (logFile == "") {
-    logFile = logFolder + "/" + latitude + "-" + longitude + "-"
-      + gpsDate.substring(4, 6) + gpsDate.substring(2, 4) + gpsDate.substring(0, 2)
-      + ".csv";
+    logFile = logFolder + "/" + latitude + "-" + longitude + "-" + gpsDate + ".csv";
+      // + gpsDate.substring(4, 6) + gpsDate.substring(2, 4) + gpsDate.substring(0, 2)
     Serial.print("Logfile: ");
     Serial.println(logFile);
   }
-  return logFile;
+
+  currentTime.second = (uint8_t)atoi(gpsTime + 4);
+  gpsTime[4] = '\0';
+  currentTime.minute = (uint8_t)atoi(gpsTime + 2);
+  gpsTime[2] = '\0';
+  currentTime.hour = (uint8_t)atoi(gpsTime);
+  calibrationDate.day = (uint8_t)atoi(gpsDate + 4);
+  gpsDate[4] = '\0';
+  calibrationDate.month = (uint8_t)atoi(gpsDate + 2);
+  gpsDate[2] = '\0';
+  calibrationDate.year = (uint16_t)(atoi(gpsDate) + 2000);
+
+  isCalibrated = true;
 }
 
 void populateDateTime(uint16_t* date, uint16_t* time) {
-  // From: https://github.com/greiman/SdFat/blob/2.2.3/doc/html.zip
-  time_t t = now();
-  *date = FS_DATE(year(t), month(t), day(t));
-  *time = FS_TIME(hour(t), minute(t), second(t));
+  // Purpose: give SdFat access to current date and time
+  // See: https://github.com/greiman/SdFat/blob/2.2.3/doc/html.zip
+  *date = FS_DATE(calibrationDate.year, calibrationDate.month, calibrationDate.day);
+  *time = FS_TIME(currentTime.hour, currentTime.minute, currentTime.second);
 }
 
 void createFile(String folder, String filename) {
@@ -237,6 +283,7 @@ void createFile(String folder, String filename) {
   sd.begin(chipSelect, SPI_SPEED);
   sd.mkdir(folder.c_str());
   sd.ls(LS_R | LS_DATE | LS_SIZE);
+  SdFile::dateTimeCallback(populateDateTime);
   testfile.open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
   testfile.close();
   sd.end();
@@ -244,6 +291,7 @@ void createFile(String folder, String filename) {
 
 void writeFile(String filename, String line) {
   sd.begin(chipSelect, SPI_SPEED);
+  SdFile::dateTimeCallback(populateDateTime);
   testfile.open(filename.c_str(), O_WRONLY | O_APPEND);
   testfile.write(line.c_str());
   testfile.close();
