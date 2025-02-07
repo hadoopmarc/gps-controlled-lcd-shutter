@@ -35,7 +35,7 @@ const uint8_t chipSelect = 5;           // Hardware connection on LCD shutter PC
 const uint8_t rainPin = 6;              // Hardware connection on the rainsensor shield
 
 // Global variables modified in interrupt routines
-volatile bool gpsHit = false;           // Set by the gpsIn interrupt only and cleared after processing
+volatile bool gpsHit;                   // Set by the gpsIn interrupt only and cleared after processing
 
 // Variables related to the measurement logic
 bool isCalibrated;                      // Used to detect if daily date calibration was done
@@ -44,10 +44,10 @@ bool started = false;                   // Becomes true after first whole minute
 const uint8_t nMeasure = 10;            // Number of measurements per minute
 uint8_t iMeasure = 0;                   // Current measurement to be made
 uint8_t actionSeconds[nMeasure];        // Used to detect next masurement instance
-bool isWet[nMeasure];                   // Measured values from the past minute
+char isWet[nMeasure];                   // Measured values from the past minute as 00001000 char array
 
-String logFolder = "arduino";
-String logFile = "";                    // "lat-lon-yymmdd.csv"
+char logFolder[] = "rain";
+char logFile[] = "rain/ddmm-dddmm-yymmdd.csv";    // "lat-lon-date.csv"
 SoftwareSerial gpsSerial(RXPin, TXPin);
 SdFat32 sd;
 File32 testfile;
@@ -80,6 +80,8 @@ void gpsIn()
 }
 
 void setup() {
+  Serial.begin(9600);
+
   // Receive second pulses from GPS
   attachInterrupt(digitalPinToInterrupt(gpsPin), gpsIn, RISING);
 
@@ -92,19 +94,23 @@ void setup() {
     actionSeconds[i] = (i + 1) * 59 / nMeasure;
   }
 
-  delay(60000);                // Be sure of GPS fix for logFile and measure times
+  gpsHit = false;
+  while (!gpsHit) {            // GPS fix needed for log filename and measure times
+    Serial.println("Waiting for gps fix");
+    delay(10000);
+  }
+  gpsHit = false;
   setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
   createFile(logFolder, logFile);
 
   uint8_t waitMinutes;
   if (currentTime.second < 59) {
     waitMinutes = 1;
-  } else {               // avoid race condition
+  } else {                     // avoid race condition
     delay(1000);
     waitMinutes = 2;
   }
   actionMinute = (currentTime.minute + waitMinutes) % 60;
-  Serial.begin(9600);
   Serial.println(F("Measuring started"));
 }
 
@@ -119,7 +125,7 @@ void loop() {
   if (currentTime.second == actionSeconds[iMeasure]) {
     // Input LOW means:  sensor relay closed -> wet conditions -> need ~LOW
     // Input HIGH means: sensor relay open -> dry conditions -> need ~HIGH
-    isWet[iMeasure] = !digitalRead(rainPin);
+    isWet[iMeasure] = (digitalRead(rainPin)) ? '0': '1';
     Serial.print(".");
     iMeasure++;
   }
@@ -128,14 +134,15 @@ void loop() {
   if (currentTime.minute == actionMinute) {
     actionMinute = (actionMinute + 1) % 60;
     if (iMeasure == nMeasure) {
-      char str[40];
-      snprintf(str, 40, "\n%02d:%02d:%02d ",
+      char line[40];
+      snprintf(line, 10, "%02d:%02d:%02d ",
                currentTime.hour, currentTime.minute, currentTime.second);
-      String line = String(str);
-      for (int i=0; i < nMeasure; i++) {
-        line += (int)isWet[i];
-      }
-      Serial.print(line + "\n");
+      memcpy(line + 9, isWet, nMeasure);
+      uint8_t writePos = 9 + nMeasure;
+      line[writePos] = '\n';
+      writePos++;
+      line[writePos] = '\0';
+      Serial.print(line);
       writeFile(logFile, line);
     }
     iMeasure = 0;
@@ -161,6 +168,7 @@ void setGpsDependentVariables() {
    * https://forum.arduino.cc/t/configurating-ublox-gps-on-bootup-from-arduino/903699/9
    * https://www.hhhh.org/wiml/proj/nmeaxor.html  NMEA message checksum calculator
    */
+  Serial.end();                                     // Serial and gpsSerial depend on same hardware timers
   gpsSerial.begin(9600);                            // Default baudrate of NEO GPS modules
 
   // Quiet unnecessary messages before the first second has passed
@@ -238,9 +246,8 @@ void setGpsDependentVariables() {
   }
   char space = ' ';
   gpsSerial.end();
+  
   Serial.begin(9600);
-  Serial.print(millis() / 1000);
-  Serial.print(": ");
   Serial.print(latitude);
   Serial.print(space);
   Serial.print(longitude);
@@ -248,25 +255,24 @@ void setGpsDependentVariables() {
   Serial.print(gpsDate);
   Serial.print(space);
   Serial.println(gpsTime);
-  Serial.end();
 
-  if (logFile == "") {
-    logFile = logFolder + "/" + latitude + "-" + longitude + "-" + gpsDate + ".csv";
-      // + gpsDate.substring(4, 6) + gpsDate.substring(2, 4) + gpsDate.substring(0, 2)
-    Serial.print("Logfile: ");
-    Serial.println(logFile);
-  }
+  memcpy(logFile + 5, latitude, 4);
+  memcpy(logFile + 10, longitude, 5);
+  memcpy(logFile + 16, gpsDate, 6);
+  Serial.print("Logfile: ");
+  Serial.println(logFile);
+
+  calibrationDate.day = (uint8_t)atoi(gpsDate + 4);
+  gpsDate[4] = '\0';
+  calibrationDate.month = (uint8_t)atoi(gpsDate + 2);
+  gpsDate[2] = '\0';
+  calibrationDate.year = (uint16_t)(atoi(gpsDate) + 2000);
 
   currentTime.second = (uint8_t)atoi(gpsTime + 4);
   gpsTime[4] = '\0';
   currentTime.minute = (uint8_t)atoi(gpsTime + 2);
   gpsTime[2] = '\0';
   currentTime.hour = (uint8_t)atoi(gpsTime);
-  calibrationDate.day = (uint8_t)atoi(gpsDate + 4);
-  gpsDate[4] = '\0';
-  calibrationDate.month = (uint8_t)atoi(gpsDate + 2);
-  gpsDate[2] = '\0';
-  calibrationDate.year = (uint16_t)(atoi(gpsDate) + 2000);
 
   isCalibrated = true;
 }
@@ -278,22 +284,22 @@ void populateDateTime(uint16_t* date, uint16_t* time) {
   *time = FS_TIME(currentTime.hour, currentTime.minute, currentTime.second);
 }
 
-void createFile(String folder, String filename) {
+void createFile(char *folder, char *filename) {
   // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
   sd.begin(chipSelect, SPI_SPEED);
-  sd.mkdir(folder.c_str());
+  sd.mkdir(folder);
   sd.ls(LS_R | LS_DATE | LS_SIZE);
   SdFile::dateTimeCallback(populateDateTime);
-  testfile.open(filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+  testfile.open(filename, O_WRONLY | O_CREAT | O_TRUNC);
   testfile.close();
   sd.end();
 }
 
-void writeFile(String filename, String line) {
+void writeFile(char *filename, char *line) {
   sd.begin(chipSelect, SPI_SPEED);
   SdFile::dateTimeCallback(populateDateTime);
-  testfile.open(filename.c_str(), O_WRONLY | O_APPEND);
-  testfile.write(line.c_str());
+  testfile.open(filename, O_WRONLY | O_APPEND);
+  testfile.write(line);
   testfile.close();
   sd.end();
 }
