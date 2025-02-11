@@ -49,7 +49,7 @@ This feedback resulted in the final optimized design, displayed in the electroni
 
 ![](doc/image/TB6612-truth.png)
 
-The required input signals to the H-bridge are displayed in the waveform diagram below. Also in this design, the end of a long part of the meteor trail - or the rising edge of the first pulse of a pulse train in the LCD opacity signal - occurs a N + 2/32 seconds exactly.
+The required input signals to the H-bridge are displayed in the waveform diagram below. Also in this design, the end of a long segment in the meteor trail - or the rising edge of the first pulse of a pulse train in the LCD opacity signal - occurs a N + 2/32 seconds exactly. After all, the long segment in the meteor trail has a duration of 3/32 second, but the GPS second pulse occurs after 1/32 second from the start of the long segment.
 
 ![](doc/image/waves_arduino.png)
 
