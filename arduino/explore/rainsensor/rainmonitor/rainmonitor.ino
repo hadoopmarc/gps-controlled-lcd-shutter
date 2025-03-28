@@ -15,10 +15,9 @@
 // - date and time are needed for the populateDatetime callback of SdFat
 // - date and time are needed for writing log lines; date and time functions from SdFast
 //   are not easily reused.
+
 #include <SdFat.h>
-#include <sdios.h>
 #include <SoftwareSerial.h>
-#include <SPI.h>
 
 #define SD_FAT_TYPE 1                   // For FAT16/FAT32
 #define USE_LONG_FILE_NAMES 1           // For encoding lat, lon and date
@@ -27,8 +26,8 @@ const int8_t DISABLE_CHIP_SELECT = -1;  // Assume no other SPI devices present
 
 // GPS module hardware configs (hardwired on the PCB of the LCD shutter)
 const uint8_t gpsPin = 2;               // Hardware connection on LCD shutter PCB
-const uint8_t RXPin = 10;               // Hardware connection on LCD shutter PCB
-const uint8_t TXPin = 9;                // Hardware connection on LCD shutter PCB
+const uint8_t rxPin = 10;               // Hardware connection on LCD shutter PCB
+const uint8_t txPin = 9;                // Hardware connection on LCD shutter PCB
 const uint8_t chipSelect = 5;           // Hardware connection on LCD shutter PCB
 
 // Rainsensor hardware configs
@@ -46,11 +45,9 @@ uint8_t iMeasure = 0;                   // Current measurement to be made
 uint8_t actionSeconds[nMeasure];        // Used to detect next masurement instance
 char isWet[nMeasure];                   // Measured values from the past minute as 00001000 char array
 
+SoftwareSerial gpsSerial(rxPin, txPin);
 char logFolder[] = "rain";
 char logFile[] = "rain/ddmm-dddmm-yymmdd.csv";    // "lat-lon-date.csv"
-SoftwareSerial gpsSerial(RXPin, TXPin);
-SdFat32 sd;
-File32 testfile;
 
 struct { 
   uint8_t day;
@@ -84,6 +81,8 @@ void setup() {
 
   // Receive second pulses from GPS
   attachInterrupt(digitalPinToInterrupt(gpsPin), gpsIn, RISING);
+  pinMode(rxPin, INPUT_PULLUP);
+  pinMode(txPin, OUTPUT);
 
   // configure the conducting rain sensor as an input and enable the internal pull-up resistor
   // https://docs.arduino.cc/tutorials/generic/digital-input-pullup/)
@@ -97,11 +96,27 @@ void setup() {
   gpsHit = false;
   while (!gpsHit) {            // GPS fix needed for log filename and measure times
     Serial.println("Waiting for gps fix");
-    delay(10000);
+    delay(5000);
   }
   gpsHit = false;
   setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
-  createFile(logFolder, logFile);
+
+  // // !!! temp provocation test
+  // // detachInterrupt(digitalPinToInterrupt(gpsPin));  // Checking assumption this does not matter
+  // Serial.println(F("First gps read finished"));
+  // delay(4000);
+  // setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
+  // Serial.println(F("Second gps read finished"));
+  // delay(4000);
+  // writeFile(logFile, "Start with provocation test");
+  // Serial.println(F("SD write finished"));
+  // // Receive second pulses from GPS
+  // pinMode(rxPin, INPUT_PULLUP);  // Somehow, the sdfat library or one of its dependencies, interferes with this setting
+  // delay(4000);
+  // setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
+  // Serial.println(F("third gps read finished"));
+  // delay(4000);
+  // // !!!
 
   uint8_t waitMinutes;
   if (currentTime.second < 59) {
@@ -125,6 +140,7 @@ void loop() {
   if (currentTime.second == actionSeconds[iMeasure]) {
     // Input LOW means:  sensor relay closed -> wet conditions -> need ~LOW
     // Input HIGH means: sensor relay open -> dry conditions -> need ~HIGH
+
     isWet[iMeasure] = (digitalRead(rainPin)) ? '0': '1';
     Serial.print(".");
     iMeasure++;
@@ -134,24 +150,26 @@ void loop() {
   if (currentTime.minute == actionMinute) {
     actionMinute = (actionMinute + 1) % 60;
     if (iMeasure == nMeasure) {
-      char line[40];
+      char line[130];   // writing power of 2 bytes is most stable
       snprintf(line, 10, "%02d:%02d:%02d ",
                currentTime.hour, currentTime.minute, currentTime.second);
-      memcpy(line + 9, isWet, nMeasure);
-      uint8_t writePos = 9 + nMeasure;
-      line[writePos] = '\n';
-      writePos++;
-      line[writePos] = '\0';
+      for (int i=0; i<nMeasure; i++) {
+        line[9 + i] = isWet[i];
+      }
+      // memcpy(line + 9, isWet, nMeasure);
+      for (int i=9 + nMeasure; i<63; i++) {
+        line[i] = ' ';
+      }
+      line[63] = '\n';
+      line[64] = '\0';
       Serial.print(line);
       writeFile(logFile, line);
     }
     iMeasure = 0;
-  }
-
-  // Recalibrate and start new log file at noon or later if not done for the current day
-  if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
+  } if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
+    // Recalibrate and set new log file at noon or later if not done for the current day
+    pinMode(rxPin, INPUT_PULLUP);  // The sdfat library or one of its dependencies interferes with this setting
     setGpsDependentVariables();
-    createFile(logFolder, logFile);
   }
   if (isCalibrated && currentTime.hour == 0) {    // Prepare for recalibration + logFile creation next noon
     isCalibrated = false;
@@ -194,10 +212,10 @@ void setGpsDependentVariables() {
   // - clear the buffer from old data
   // - loop fast and check every time whether a character is available
   // - the pace of the 9600 baud serial interface is 1 byte every 1.04 ms
-  char gpsTime[7] = "000000";                       // hhmmss
-  char gpsDate[7] = "000000";                       // ddmmyy
-  char latitude[5] = "0000";                        // ddmm, North/South not read
-  char longitude[6] = "00000";                      // dddmm, East/West not read
+  char gpsTime[] = "000000";                       // hhmmss
+  char gpsDate[] = "000000";                       // ddmmyy
+  char latitude[] = "0000";                        // ddmm, North/South not read
+  char longitude[] = "00000";                      // dddmm, East/West not read
   char current;
   bool lineStarted = false;
   int iComma = 0;
@@ -206,6 +224,13 @@ void setGpsDependentVariables() {
   while (gpsSerial.available()) {                   // Clear buffer from old data
     gpsSerial.read();
   }
+  // // !!! part of temp provocation test
+  // gpsSerial.end();
+  // Serial.begin(9600);
+  // Serial.println("... gps first available passed");
+  // Serial.end();
+  // gpsSerial.begin(9600);
+  // // !!!
   while (true) {
     if (gpsSerial.available()) {                    // Loop fast until a char is available
       current = gpsSerial.read();
@@ -262,11 +287,11 @@ void setGpsDependentVariables() {
   Serial.print("Logfile: ");
   Serial.println(logFile);
 
-  calibrationDate.day = (uint8_t)atoi(gpsDate + 4);
+  calibrationDate.year = (uint16_t)(atoi(gpsDate + 4) + 2000);
   gpsDate[4] = '\0';
   calibrationDate.month = (uint8_t)atoi(gpsDate + 2);
   gpsDate[2] = '\0';
-  calibrationDate.year = (uint16_t)(atoi(gpsDate) + 2000);
+  calibrationDate.day = (uint8_t)atoi(gpsDate);
 
   currentTime.second = (uint8_t)atoi(gpsTime + 4);
   gpsTime[4] = '\0';
@@ -284,21 +309,13 @@ void populateDateTime(uint16_t* date, uint16_t* time) {
   *time = FS_TIME(currentTime.hour, currentTime.minute, currentTime.second);
 }
 
-void createFile(char *folder, char *filename) {
-  // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
-  sd.begin(chipSelect, SPI_SPEED);
-  sd.mkdir(folder);
-  sd.ls(LS_R | LS_DATE | LS_SIZE);
-  SdFile::dateTimeCallback(populateDateTime);
-  testfile.open(filename, O_WRONLY | O_CREAT | O_TRUNC);
-  testfile.close();
-  sd.end();
-}
-
 void writeFile(char *filename, char *line) {
+  // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
+  SdFat32 sd;
+  File32 testfile;
   sd.begin(chipSelect, SPI_SPEED);
   SdFile::dateTimeCallback(populateDateTime);
-  testfile.open(filename, O_WRONLY | O_APPEND);
+  testfile.open(filename, O_WRONLY | O_CREAT | O_APPEND);
   testfile.write(line);
   testfile.close();
   sd.end();
