@@ -18,6 +18,7 @@
 
 #include <SdFat.h>
 #include <SoftwareSerial.h>
+#include <Adafruit_MLX90614.h>
 
 #define SD_FAT_TYPE 1                   // For FAT16/FAT32
 #define USE_LONG_FILE_NAMES 1           // For encoding lat, lon and date
@@ -30,7 +31,7 @@ const uint8_t rxPin = 10;               // Hardware connection on LCD shutter PC
 const uint8_t txPin = 9;                // Hardware connection on LCD shutter PCB
 const uint8_t chipSelect = 5;           // Hardware connection on LCD shutter PCB
 
-// Rainsensor hardware configs
+// Conductive rainsensor hardware configs
 const uint8_t rainPin = 6;              // Hardware connection on the rainsensor shield
 
 // Global variables modified in interrupt routines
@@ -43,8 +44,11 @@ bool started = false;                   // Becomes true after first whole minute
 const uint8_t nMeasure = 10;            // Number of measurements per minute
 uint8_t iMeasure = 0;                   // Current measurement to be made
 uint8_t actionSeconds[nMeasure];        // Used to detect next masurement instance
-char isWet[nMeasure];                   // Measured values from the past minute as 00001000 char array
+char isWet[nMeasure+1];                 // Measured values from the past minute as 00001000 char array
+double ambientTemp = 0.;                // Ambient temperature measured by Melexis 96014 IR sensor
+double skyTemp = 0.;                    // Sky temperature measured by Melexis 96014 IR sensor
 
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 SoftwareSerial gpsSerial(rxPin, txPin);
 char logFolder[] = "rain";
 char logFile[] = "rain/ddmm-dddmm-yymmdd.csv";    // "lat-lon-date.csv"
@@ -78,6 +82,7 @@ void gpsIn()
 
 void setup() {
   Serial.begin(9600);
+  isWet[nMeasure] = '\0';
 
   // Receive second pulses from GPS
   attachInterrupt(digitalPinToInterrupt(gpsPin), gpsIn, RISING);
@@ -127,6 +132,15 @@ void setup() {
   }
   actionMinute = (currentTime.minute + waitMinutes) % 60;
   Serial.println(F("Measuring started"));
+
+  // IR temperature sensor (3V3: Vin, pin A4: SDA, pin A5: SCL, GND: GND)
+  // Keep default emissivity = 1.00
+  if (!mlx.begin()) {
+    Serial.println("Error connecting to MLX sensor. Check wiring.");
+    while (1);
+  };
+  Serial.print(mlx.readAmbientTempC());
+  Serial.println(" C ambient temperature");
 }
 
 void loop() {
@@ -140,8 +154,12 @@ void loop() {
   if (currentTime.second == actionSeconds[iMeasure]) {
     // Input LOW means:  sensor relay closed -> wet conditions -> need ~LOW
     // Input HIGH means: sensor relay open -> dry conditions -> need ~HIGH
-
     isWet[iMeasure] = (digitalRead(rainPin)) ? '0': '1';
+
+    // IR temperature sensor (3V3: Vin, pin A4: SDA, pin A5: SCL, GND: GND)
+    // Keep default emissivity = 1.00
+    ambientTemp = (iMeasure * ambientTemp + mlx.readAmbientTempC()) / (iMeasure + 1);
+    skyTemp = (iMeasure * skyTemp + mlx.readObjectTempC()) / (iMeasure + 1);
     Serial.print(".");
     iMeasure++;
   }
@@ -150,14 +168,12 @@ void loop() {
   if (currentTime.minute == actionMinute) {
     actionMinute = (actionMinute + 1) % 60;
     if (iMeasure == nMeasure) {
-      char line[130];   // writing power of 2 bytes is most stable
-      snprintf(line, 10, "%02d:%02d:%02d ",
-               currentTime.hour, currentTime.minute, currentTime.second);
-      for (int i=0; i<nMeasure; i++) {
-        line[9 + i] = isWet[i];
-      }
-      // memcpy(line + 9, isWet, nMeasure);
-      for (int i=9 + nMeasure; i<63; i++) {
+      char line[65];   // writing power of 2 bytes is most stable
+      sprintf(line, "%02d:%02d:%02d %s",
+               currentTime.hour, currentTime.minute, currentTime.second, isWet);
+      dtostrf(ambientTemp, 6, 1, line + strlen(line));
+      dtostrf(skyTemp, 7, 1, line + strlen(line));
+      for (int i = strlen(line); i<63; i++) {
         line[i] = ' ';
       }
       line[63] = '\n';
