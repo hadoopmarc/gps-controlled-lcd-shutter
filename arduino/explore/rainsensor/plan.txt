@@ -11,3 +11,9 @@ Current 3-wire cable:
 - blue: GND from Arduino to ground and REL CO of rain sensor
 - brown: +12 V from Vin Arduino to rain sensor
 - green/yellow: D2 from Arduino to REL NO of rain sensor
+
+
+Adafruit Melexis 96014
+https://docs.arduino.cc/learn/communication/wire/
+- A4 -> SDA
+- A5 -> SCL

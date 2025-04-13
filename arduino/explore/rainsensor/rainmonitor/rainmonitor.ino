@@ -20,6 +20,7 @@
 #include <SoftwareSerial.h>
 #include <Adafruit_MLX90614.h>
 
+#define DEBUG                           // Uncomment to have debug code executed
 #define SD_FAT_TYPE 1                   // For FAT16/FAT32
 #define USE_LONG_FILE_NAMES 1           // For encoding lat, lon and date
 #define SPI_SPEED SD_SCK_MHZ(4)         // Can be max 50 MHz
@@ -50,6 +51,7 @@ double skyTemp = 0.;                    // Sky temperature measured by Melexis 9
 
 Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 SoftwareSerial gpsSerial(rxPin, txPin);
+SdFat32 sd;
 char logFolder[] = "rain";
 char logFile[] = "rain/ddmm-dddmm-yymmdd.csv";    // "lat-lon-date.csv"
 
@@ -86,12 +88,14 @@ void setup() {
 
   // Receive second pulses from GPS
   attachInterrupt(digitalPinToInterrupt(gpsPin), gpsIn, RISING);
-  pinMode(rxPin, INPUT_PULLUP);
+  // pinMode(rxPin, INPUT_PULLUP);  Moved to setGpsDependentVariables
   pinMode(txPin, OUTPUT);
 
   // configure the conducting rain sensor as an input and enable the internal pull-up resistor
   // https://docs.arduino.cc/tutorials/generic/digital-input-pullup/)
   pinMode(rainPin, INPUT_PULLUP);
+
+  sd.begin(chipSelect, SPI_SPEED);
 
   // Precalculate actionMinutes
   for (int i=0; i<nMeasure; i++) {
@@ -99,10 +103,13 @@ void setup() {
   }
 
   gpsHit = false;
+  Serial.println("Waiting for gps fix");
   while (!gpsHit) {            // GPS fix needed for log filename and measure times
-    Serial.println("Waiting for gps fix");
-    delay(5000);
+    Serial.print(".");
+    delay(1000);
   }
+  Serial.println("");
+  delay(5000);
   gpsHit = false;
   setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
 
@@ -123,24 +130,20 @@ void setup() {
   // delay(4000);
   // // !!!
 
-  uint8_t waitMinutes;
-  if (currentTime.second < 59) {
-    waitMinutes = 1;
-  } else {                     // avoid race condition
-    delay(1000);
-    waitMinutes = 2;
-  }
-  actionMinute = (currentTime.minute + waitMinutes) % 60;
-  Serial.println(F("Measuring started"));
-
   // IR temperature sensor (3V3: Vin, pin A4: SDA, pin A5: SCL, GND: GND)
   // Keep default emissivity = 1.00
-  if (!mlx.begin()) {
-    Serial.println("Error connecting to MLX sensor. Check wiring.");
-    while (1);
-  };
+  // if (!mlx.begin()) {
+  //   Serial.println("Error connecting to MLX sensor. Check wiring.");
+  //   while (1);
+  // };
   Serial.print(mlx.readAmbientTempC());
   Serial.println(" C ambient temperature");
+
+  if (currentTime.second == 59) {  // avoid race condition
+    delay(1000);
+  }
+  actionMinute = (currentTime.minute + 1) % 60;
+  Serial.println(F("Measuring started"));
 }
 
 void loop() {
@@ -180,12 +183,32 @@ void loop() {
       line[64] = '\0';
       Serial.print(line);
       writeFile(logFile, line);
+      #ifdef DEBUG
+      Serial.println("Write completed");
+      #endif
     }
     iMeasure = 0;
-  } if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
+    #ifdef DEBUG
+    if ((currentTime.minute % 5) == 0) {    // New file every 5 minutes
+      currentTime.hour = 12;
+      isCalibrated = false;
+    }
+    #endif
+  }
+  /*
+  Het probleemt lijkt nu:
+  - na de eerste keer calibratie werkt het aanroepen van sdfat (5 x write completed)
+  - na de calibratie op t = 5 min blijft het script hangen op de aanroep van sdfat (geen write completed)
+
+  */
+  if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
     // Recalibrate and set new log file at noon or later if not done for the current day
-    pinMode(rxPin, INPUT_PULLUP);  // The sdfat library or one of its dependencies interferes with this setting
     setGpsDependentVariables();
+    if (currentTime.second == 59) {  // avoid race condition
+      delay(1000);
+    }
+    actionMinute = (currentTime.minute + 1) % 60;
+    iMeasure = 0;
   }
   if (isCalibrated && currentTime.hour == 0) {    // Prepare for recalibration + logFile creation next noon
     isCalibrated = false;
@@ -202,6 +225,7 @@ void setGpsDependentVariables() {
    * https://forum.arduino.cc/t/configurating-ublox-gps-on-bootup-from-arduino/903699/9
    * https://www.hhhh.org/wiml/proj/nmeaxor.html  NMEA message checksum calculator
    */
+  pinMode(rxPin, INPUT_PULLUP);  // Be sure that other libs like sdfat have not overwritten this setting
   Serial.end();                                     // Serial and gpsSerial depend on same hardware timers
   gpsSerial.begin(9600);                            // Default baudrate of NEO GPS modules
 
@@ -236,17 +260,17 @@ void setGpsDependentVariables() {
   bool lineStarted = false;
   int iComma = 0;
   int iCopy;
-  delay(1100);
-  while (gpsSerial.available()) {                   // Clear buffer from old data
+  delay(2100);                                     // Starting too early crashes parsing below
+  while (gpsSerial.available()) {                  // Clear buffer from old data
     gpsSerial.read();
   }
-  // // !!! part of temp provocation test
-  // gpsSerial.end();
-  // Serial.begin(9600);
-  // Serial.println("... gps first available passed");
-  // Serial.end();
-  // gpsSerial.begin(9600);
-  // // !!!
+  // !!! part of temp provocation test
+  gpsSerial.end();
+  Serial.begin(9600);
+  Serial.println("... gps first available passed");
+  Serial.end();
+  gpsSerial.begin(9600);
+  // !!!
   while (true) {
     if (gpsSerial.available()) {                    // Loop fast until a char is available
       current = gpsSerial.read();
@@ -266,7 +290,10 @@ void setGpsDependentVariables() {
       continue;
     }
     if (iComma == 1 && iCopy < 6) {
-      gpsTime[iCopy] = current;
+      int digit = current - '0';
+      if (digit >= 0 && digit < 10) {
+        gpsTime[iCopy] = current;
+      }
       iCopy++;
     }
     if (iComma == 3 && iCopy < 4) {
@@ -285,9 +312,9 @@ void setGpsDependentVariables() {
       }
     }
   }
-  char space = ' ';
   gpsSerial.end();
   
+  char space = ' ';
   Serial.begin(9600);
   Serial.print(latitude);
   Serial.print(space);
@@ -300,6 +327,10 @@ void setGpsDependentVariables() {
   memcpy(logFile + 5, latitude, 4);
   memcpy(logFile + 10, longitude, 5);
   memcpy(logFile + 16, gpsDate, 6);
+  #ifdef DEBUG
+  memcpy(logFile + 5, gpsTime, 4);
+  memcpy(logFile + 10, "debug", 5);
+  #endif
   Serial.print("Logfile: ");
   Serial.println(logFile);
 
@@ -327,12 +358,12 @@ void populateDateTime(uint16_t* date, uint16_t* time) {
 
 void writeFile(char *filename, char *line) {
   // O_flags, see: https://github.com/greiman/SdFat/blob/2.2.3/src/FsLib/FsFile.h#L450
-  SdFat32 sd;
   File32 testfile;
-  sd.begin(chipSelect, SPI_SPEED);
   SdFile::dateTimeCallback(populateDateTime);
+  #ifdef DEBUG
+  sd.ls("rain/");
+  #endif
   testfile.open(filename, O_WRONLY | O_CREAT | O_APPEND);
   testfile.write(line);
   testfile.close();
-  sd.end();
 }
