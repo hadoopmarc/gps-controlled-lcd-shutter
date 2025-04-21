@@ -89,7 +89,7 @@ void setup() {
   // Receive second pulses from GPS
   attachInterrupt(digitalPinToInterrupt(gpsPin), gpsIn, RISING);
   // pinMode(rxPin, INPUT_PULLUP);  Moved to setGpsDependentVariables
-  pinMode(txPin, OUTPUT);
+  // pinMode(txPin, OUTPUT);
 
   // configure the conducting rain sensor as an input and enable the internal pull-up resistor
   // https://docs.arduino.cc/tutorials/generic/digital-input-pullup/)
@@ -226,6 +226,7 @@ void setGpsDependentVariables() {
    * https://www.hhhh.org/wiml/proj/nmeaxor.html  NMEA message checksum calculator
    */
   pinMode(rxPin, INPUT_PULLUP);  // Be sure that other libs like sdfat have not overwritten this setting
+  pinMode(txPin, OUTPUT);
   Serial.end();                                     // Serial and gpsSerial depend on same hardware timers
   gpsSerial.begin(9600);                            // Default baudrate of NEO GPS modules
 
@@ -260,17 +261,16 @@ void setGpsDependentVariables() {
   bool lineStarted = false;
   int iComma = 0;
   int iCopy;
-  delay(2100);                                     // Starting too early crashes parsing below
+  delay(1100);                                     // Starting too early crashes parsing below
   while (gpsSerial.available()) {                  // Clear buffer from old data
     gpsSerial.read();
   }
-  // !!! part of temp provocation test
-  gpsSerial.end();
-  Serial.begin(9600);
-  Serial.println("... gps first available passed");
-  Serial.end();
-  gpsSerial.begin(9600);
-  // !!!
+  // // !!! part of temp provocation test
+  // gpsSerial.end();
+  // Serial.begin(9600);
+  // Serial.println("--- gps first available passed");
+  // Serial.end();
+  // gpsSerial.begin(9600);
   while (true) {
     if (gpsSerial.available()) {                    // Loop fast until a char is available
       current = gpsSerial.read();
@@ -304,7 +304,7 @@ void setGpsDependentVariables() {
       longitude[iCopy] = current;
       iCopy++;
     }
-    if (iComma == 9) {
+    if (iComma == 9 && iCopy < 6) {
       gpsDate[iCopy] = current;
       iCopy++;
       if (iCopy == 6) {
