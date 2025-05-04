@@ -1,5 +1,6 @@
 /* 
  * Simple rain monitor using a B+B Thermo-Technik 2020 version rain sensor
+ * and a Melexis MLX90614 IR temperature sensor
  *
  * Sensor box has default factory settings for the internal jumpers ("plug links")
  * (heating on; close the relay when wet conditions occur)
@@ -20,6 +21,7 @@
 #include <SoftwareSerial.h>
 #include <Adafruit_MLX90614.h>
 
+// #define DEBUG                        // Uncomment to have debug code executed
 #define SD_FAT_TYPE 1                   // For FAT16/FAT32
 #define USE_LONG_FILE_NAMES 1           // For encoding lat, lon and date
 #define SPI_SPEED SD_SCK_MHZ(4)         // Can be max 50 MHz
@@ -106,23 +108,6 @@ void setup() {
   gpsHit = false;
   setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
 
-  // // !!! temp provocation test
-  // // detachInterrupt(digitalPinToInterrupt(gpsPin));  // Checking assumption this does not matter
-  // Serial.println(F("First gps read finished"));
-  // delay(4000);
-  // setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
-  // Serial.println(F("Second gps read finished"));
-  // delay(4000);
-  // writeFile(logFile, "Start with provocation test");
-  // Serial.println(F("SD write finished"));
-  // // Receive second pulses from GPS
-  // pinMode(rxPin, INPUT_PULLUP);  // Somehow, the sdfat library or one of its dependencies, interferes with this setting
-  // delay(4000);
-  // setGpsDependentVariables();  // Sets calibrationDate, currentTime and logFile
-  // Serial.println(F("third gps read finished"));
-  // delay(4000);
-  // // !!!
-
   uint8_t waitMinutes;
   if (currentTime.second < 59) {
     waitMinutes = 1;
@@ -180,9 +165,20 @@ void loop() {
       line[64] = '\0';
       Serial.print(line);
       writeFile(logFile, line);
+      #ifdef DEBUG
+      Serial.println("Write completed");
+      #endif
     }
     iMeasure = 0;
-  } if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
+    #ifdef DEBUG
+    if ((currentTime.minute % 5) == 0) {    // New file every 5 minutes
+      currentTime.hour = 12;
+      isCalibrated = false;
+    }
+    #endif
+  }
+
+  if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
     // Recalibrate and set new log file at noon or later if not done for the current day
     pinMode(rxPin, INPUT_PULLUP);  // The sdfat library or one of its dependencies interferes with this setting
     setGpsDependentVariables();
@@ -240,13 +236,6 @@ void setGpsDependentVariables() {
   while (gpsSerial.available()) {                   // Clear buffer from old data
     gpsSerial.read();
   }
-  // // !!! part of temp provocation test
-  // gpsSerial.end();
-  // Serial.begin(9600);
-  // Serial.println("... gps first available passed");
-  // Serial.end();
-  // gpsSerial.begin(9600);
-  // // !!!
   while (true) {
     if (gpsSerial.available()) {                    // Loop fast until a char is available
       current = gpsSerial.read();
@@ -300,6 +289,10 @@ void setGpsDependentVariables() {
   memcpy(logFile + 5, latitude, 4);
   memcpy(logFile + 10, longitude, 5);
   memcpy(logFile + 16, gpsDate, 6);
+  #ifdef DEBUG
+  memcpy(logFile + 5, gpsTime, 4);
+  memcpy(logFile + 10, "debug", 5);
+  #endif
   Serial.print("Logfile: ");
   Serial.println(logFile);
 
