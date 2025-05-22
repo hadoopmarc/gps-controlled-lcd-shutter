@@ -153,17 +153,18 @@ void loop() {
   if (currentTime.minute == actionMinute) {
     actionMinute = (actionMinute + 1) % 60;
     if (iMeasure == nMeasure) {
-      char line[65];   // writing power of 2 bytes is most stable
+      // writing power of 2 bytes is most stable
+      char line[65] = "                                                                ";
       sprintf(line, "%02d:%02d:%02d %s",
                currentTime.hour, currentTime.minute, currentTime.second, isWet);
       dtostrf(ambientTemp, 6, 1, line + strlen(line));
       dtostrf(skyTemp, 7, 1, line + strlen(line));
-      for (int i = strlen(line); i<63; i++) {
+      for (int i = strlen(line); i<64; i++) {
         line[i] = ' ';
       }
-      line[63] = '\n';
       line[64] = '\0';
-      Serial.print(line);
+      Serial.println(line);
+      line[63] = '\n';
       writeFile(logFile, line);
       #ifdef DEBUG
       Serial.println("Write completed");
