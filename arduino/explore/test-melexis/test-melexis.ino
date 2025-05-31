@@ -22,6 +22,9 @@
     Vin: 3V3
     GND: GND
 
+  Pull-up resistors:
+    https://learn.adafruit.com/working-with-i2c-devices/pull-up-resistors
+
   Example source:
     https://github.com/adafruit/Adafruit-MLX90614-Library/blob/master/examples/mlxtest/mlxtest.ino
  */
