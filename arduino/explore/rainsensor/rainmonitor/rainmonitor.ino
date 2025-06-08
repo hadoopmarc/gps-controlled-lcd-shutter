@@ -17,6 +17,7 @@
 // - date and time are needed for writing log lines; date and time functions from SdFast
 //   are not easily reused.
 
+#include <avr/wdt.h>
 #include <SdFat.h>
 #include <SoftwareSerial.h>
 #include <Adafruit_MLX90614.h>
@@ -126,9 +127,16 @@ void setup() {
   };
   Serial.print(mlx.readAmbientTempC());
   Serial.println(" C ambient temperature");
+
+  // This should reset the Arduino if it hangs for some reason
+  // It assumes that write operations complete within 8 seconds
+  wdt_enable(WDTO_8S);
 }
 
 void loop() {
+  // The watchdog needs to be reset explicitly for each iteration of the loop
+  wdt_reset();
+
   // Keep current time
   if (gpsHit) {
     gpsHit = false;
@@ -154,11 +162,16 @@ void loop() {
     actionMinute = (actionMinute + 1) % 60;
     if (iMeasure == nMeasure) {
       // writing power of 2 bytes is most stable
-      char line[65] = "                                                                ";
-      sprintf(line, "%02d:%02d:%02d %s",
-               currentTime.hour, currentTime.minute, currentTime.second, isWet);
-      dtostrf(ambientTemp, 6, 1, line + strlen(line));
-      dtostrf(skyTemp, 7, 1, line + strlen(line));
+      char line[65];
+      int ambientWhole = int(ambientTemp);
+      int ambientDecimal = int(round(10 * (ambientTemp - ambientWhole)));
+      int skyWhole = int(skyTemp);
+      int skyDecimal = int(round(10 * (skyTemp - skyWhole)));
+      sprintf(line, "%02d:%02d:%02d %s %+03d.%d %+04d.%d",
+               currentTime.hour, currentTime.minute, currentTime.second, isWet,
+               ambientWhole, ambientDecimal, skyWhole, skyDecimal);
+      // dtostrf(ambientTemp, 6, 1, line + strlen(line));
+      // dtostrf(skyTemp, 7, 1, line + strlen(line));
       for (int i = strlen(line); i<64; i++) {
         line[i] = ' ';
       }
@@ -181,8 +194,9 @@ void loop() {
 
   if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
     // Recalibrate and set new log file at noon or later if not done for the current day
-    pinMode(rxPin, INPUT_PULLUP);  // The sdfat library or one of its dependencies interferes with this setting
-    setGpsDependentVariables();
+    // pinMode(rxPin, INPUT_PULLUP);  // The sdfat library or one of its dependencies interferes with this setting
+    // setGpsDependentVariables();
+    delay(10000);  // Simply trigger the watchdog and give the script a fresh reboot
   }
   if (isCalibrated && currentTime.hour == 0) {    // Prepare for recalibration + logFile creation next noon
     isCalibrated = false;
