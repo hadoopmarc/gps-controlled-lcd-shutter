@@ -158,20 +158,14 @@ void loop() {
   }
 
   // Process past measurements at the start of a minute
+  char line[65];  // writing power of 2 bytes is most stable
   if (currentTime.minute == actionMinute) {
     actionMinute = (actionMinute + 1) % 60;
     if (iMeasure == nMeasure) {
-      // writing power of 2 bytes is most stable
-      char line[65];
-      int ambientWhole = int(ambientTemp);
-      int ambientDecimal = int(round(10 * (ambientTemp - ambientWhole)));
-      int skyWhole = int(skyTemp);
-      int skyDecimal = int(round(10 * (skyTemp - skyWhole)));
-      sprintf(line, "%02d:%02d:%02d %s %+03d.%d %+04d.%d",
-               currentTime.hour, currentTime.minute, currentTime.second, isWet,
-               ambientWhole, ambientDecimal, skyWhole, skyDecimal);
-      // dtostrf(ambientTemp, 6, 1, line + strlen(line));
-      // dtostrf(skyTemp, 7, 1, line + strlen(line));
+      sprintf(line, "%02d:%02d:%02d %s",
+               currentTime.hour, currentTime.minute, currentTime.second, isWet);
+      dtostrfixed(ambientTemp, 5, 1, line + strlen(line));
+      dtostrfixed(skyTemp, 6, 1, line + strlen(line));
       for (int i = strlen(line); i<64; i++) {
         line[i] = ' ';
       }
@@ -343,4 +337,17 @@ void writeFile(char *filename, char *line) {
   testfile.write(line);
   testfile.close();
   sd.end();
+}
+
+void dtostrfixed(float value, int min_width, int num_decimal, char buffer[]){
+  // dtostrf() cannot output fixed format "+06.1f"
+  int valueWhole = int(value);
+  int valueDecimal = int(round(10 * (value - valueWhole)));
+  if (valueDecimal == 10) {
+    valueDecimal = 0;
+    valueWhole++;
+  }
+  char format[16];
+  sprintf(format, " %%+0%dd.%%%dd", min_width - num_decimal - 1, num_decimal);
+  sprintf(buffer, format, valueWhole, valueDecimal);
 }
