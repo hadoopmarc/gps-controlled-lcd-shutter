@@ -64,13 +64,12 @@ def run():
 
 def wait_one_minute_before():
     """Waits until 1 minute before a five minute interval"""
-    current_dt = datetime.now((timezone.utc))
-    remainder = current_dt.timestamp() % 300
-    if remainder < 240:
-        time.sleep(240 - remainder)
-    else:
-        print("Unexpected time, should only happen at the start")
-    print(f"{str(datetime.now(timezone.utc))[:21]} {remainder:6.1f}")
+    while True:
+        current_dt = datetime.now(timezone.utc)
+        if int(current_dt.timestamp()) % 300 ==  240:
+            break
+        time.sleep(0.5)
+    print(f"{str(current_dt)[:21]}")
 
 
 def retrieve_predictions(latlon):
