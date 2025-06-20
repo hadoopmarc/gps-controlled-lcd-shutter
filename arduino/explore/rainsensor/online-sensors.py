@@ -21,7 +21,7 @@ import paho.mqtt.client as mqtt
 import requests
 
 # MQTT configuration
-STATION = "NL000W"  # Utrecht; NL001A: Alphen aan den Rijn
+STATION = "NL001A"  # Utrecht; NL000W: Alphen aan den Rijn
 MQTT_BROKER = "6831f8e4add443adb5ccd2fac74382e0.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883  # SSL/TLS port
 MQTT_USERNAME = "gmnstation"
@@ -53,7 +53,7 @@ def run():
         predict_dt, rain_values = retrieve_predictions(BIKO_LATLON)
         nstars = process_star_counts()
         with open(filename, "a") as f:
-            values = ','.join([f'{v:.1f}' if v >= 0. else '' for v in rain_values])
+            values = ','.join([f'{v:.1f}' for v in rain_values])
             print(f"{str(predict_dt)[:16]},{nstars:06.1f},{values}", file=f)
         # predict_dt, rain_values = retrieve_predictions(KNMI_LATLON)
         # with open(filename, "a") as f:
@@ -73,8 +73,8 @@ def wait_one_minute_before():
 
 
 def retrieve_predictions(latlon):
-    # Generate expected prediction times in hh:mm format
-    predict_dt = datetime.now(timezone.utc)
+    # Generate expected local prediction times in hh:mm format
+    predict_dt = datetime.now()
     start_m = 5 * (int(predict_dt.minute) // 5 + 1)
     if start_m < 60:
         predict_dt = predict_dt.replace(minute=start_m)
@@ -100,7 +100,9 @@ def retrieve_predictions(latlon):
     # - prediction not present -> append -1 to rain_values
     # - predictions out of order -> does not matter
     rain_rates = [predictions.get(hm, -1) for hm in hms]
-    return predict_dt, rain_rates
+    # Astronomy wants time in UTC
+    predict_utc = predict_dt.replace(tzinfo=timezone.utc)
+    return predict_utc, rain_rates
 
 
 def process_star_counts():
@@ -159,7 +161,7 @@ def on_message(_, __, msg):
             print(f"Camera is {camera_status}")
     elif msg.topic.endswith("stars"):
         star_counts.append(int(msg.payload))
-        print(msg.topic + " " + str(msg.qos) + " " + msg.payload.decode("utf8"))
+        print(msg.topic + " " + msg.payload.decode("utf8"))
 
 
 if __name__ == "__main__":
