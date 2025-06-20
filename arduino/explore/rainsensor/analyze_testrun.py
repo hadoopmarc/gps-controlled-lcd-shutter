@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
 
 TESTRUN_DIR = "testrun-2025-06-02"
 
@@ -31,19 +33,45 @@ def run():
         .sort_values(by="datetime_wet")
         .reset_index(drop=True)
     )
-    print(online_df)
+    if TESTRUN_DIR == "testrun-2025-06-02":   # Data not saved as UTC
+        online_df["datetime_wet"] = online_df["datetime_wet"] - timedelta(hours = 2)
     arduino_df = (
         pd.concat(arduino_dfs)
         .sort_values(by="datetime")
         .reset_index(drop=True)
     )
-    print(arduino_df)
     all_df = (
         pd.merge_asof(arduino_df, online_df, left_on="datetime", right_on="datetime_wet")
         .apply(interpolate_rain, axis=1)
         .drop("datetime_wet", axis=1)
     )
-    print(all_df)
+    all_df["deltaT"] = all_df["t_amb"] - all_df["t_sky"]
+    all_df["numwet"] = all_df["iswet"].apply(lambda x: len([c for c in x if c == '1']))
+    print(all_df)  # .loc[all_df["iswet"] != "0000000000"])
+    col_max = {
+        "numwet": 10.,
+        "deltaT": 40.,
+        "t0": 6.,
+        "t1": 6.
+    }
+    for col, max_val in col_max.items():
+        all_df[col] = all_df[col] / max_val
+    sns.set_theme(rc={'figure.figsize': (16., 8.)})
+    timerange1 = (all_df["datetime"] >= datetime(2025, 6, 2, 1, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 6, 2, 13 ,0))
+    timerange2 = (all_df["datetime"] >= datetime(2025, 6, 3, 18, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 6, 4, 12 ,0))
+    timerange3 = (all_df["datetime"] >= datetime(2025, 6, 5, 0, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 6, 6, 0 ,0))
+    rainplot = sns.lineplot(data=all_df.loc[timerange1].set_index('datetime')[col_max.keys()])
+    rainplot.get_figure().savefig(Path(TESTRUN_DIR) / "rain1.png")
+    plt.show()
+    rainplot = sns.lineplot(data=all_df.loc[timerange2].set_index('datetime')[col_max.keys()])
+    rainplot.get_figure().savefig(Path(TESTRUN_DIR) / "rain2.png")
+    plt.show()
+    rainplot = sns.lineplot(data=all_df.loc[timerange3].set_index('datetime')[col_max.keys()])
+    rainplot.get_figure().savefig(Path(TESTRUN_DIR) / "rain3.png")
+    plt.show()
 
 
 def add_date(row, obsdate):
@@ -73,4 +101,5 @@ def interpolate_rain(row):
 
 
 if __name__ == "__main__":
+    pd.set_option('display.max_rows', 500)
     run()
