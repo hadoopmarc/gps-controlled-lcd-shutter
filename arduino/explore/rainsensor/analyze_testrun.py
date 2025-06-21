@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-TESTRUN_DIR = "testrun-2025-06-02"
+TESTRUN_DIR = "testrun-2025-06-14"
 
 
 def run():
@@ -24,7 +24,7 @@ def run():
                 path,
                 sep=r"\s+",
                 names=["datetime", "iswet", "t_amb", "t_sky"],
-                dtype={"iswet":  str}
+                dtype={"iswet":  str, "t_sky": str}
             ).apply(add_date, obsdate=obsdate, axis=1)
             arduino_dfs.append(df)
     online_df = (
@@ -34,12 +34,15 @@ def run():
         .reset_index(drop=True)
     )
     if TESTRUN_DIR == "testrun-2025-06-02":   # Data not saved as UTC
-        online_df["datetime_wet"] = online_df["datetime_wet"] - timedelta(hours = 2)
+        online_df["datetime_wet"] = online_df["datetime_wet"] - timedelta(hours=2)
     arduino_df = (
         pd.concat(arduino_dfs)
         .sort_values(by="datetime")
         .reset_index(drop=True)
     )
+    # Self built Arduino sprintf implementation can print the erroneous patterns +000.-4 and -001.-6
+    arduino_df["t_sky"] = arduino_df["t_sky"].str.replace(
+        r"([+-]00)[\d][.]-([\d]+)", lambda m: m.group(1) + "1e-" + m.group(2), regex=True).astype(float)
     all_df = (
         pd.merge_asof(arduino_df, online_df, left_on="datetime", right_on="datetime_wet")
         .apply(interpolate_rain, axis=1)
@@ -49,6 +52,7 @@ def run():
     all_df["numwet"] = all_df["iswet"].apply(lambda x: len([c for c in x if c == '1']))
     print(all_df)  # .loc[all_df["iswet"] != "0000000000"])
     col_max = {
+        "nstars": 100.,
         "numwet": 10.,
         "deltaT": 40.,
         "t0": 6.,
@@ -57,12 +61,15 @@ def run():
     for col, max_val in col_max.items():
         all_df[col] = all_df[col] / max_val
     sns.set_theme(rc={'figure.figsize': (16., 8.)})
-    timerange1 = (all_df["datetime"] >= datetime(2025, 6, 2, 1, 0)) & \
-                (all_df["datetime"] <= datetime(2025, 6, 2, 13 ,0))
-    timerange2 = (all_df["datetime"] >= datetime(2025, 6, 3, 18, 0)) & \
-                (all_df["datetime"] <= datetime(2025, 6, 4, 12 ,0))
-    timerange3 = (all_df["datetime"] >= datetime(2025, 6, 5, 0, 0)) & \
-                (all_df["datetime"] <= datetime(2025, 6, 6, 0 ,0))
+    timerange1 = (all_df["datetime"] >= datetime(2025, 6, 14, 12, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 6, 15, 4 ,0))
+    timerange2 = (all_df["datetime"] >= datetime(2025, 6, 15, 16, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 6, 16, 8 ,0))
+    timerange3 = (all_df["datetime"] >= datetime(2025, 6, 18, 12, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 6, 19, 4 ,0))
+    rainplot = sns.lineplot(data=all_df.set_index('datetime')[col_max.keys()])
+    rainplot.get_figure().savefig(Path(TESTRUN_DIR) / "rain0.png")
+    plt.show()
     rainplot = sns.lineplot(data=all_df.loc[timerange1].set_index('datetime')[col_max.keys()])
     rainplot.get_figure().savefig(Path(TESTRUN_DIR) / "rain1.png")
     plt.show()
