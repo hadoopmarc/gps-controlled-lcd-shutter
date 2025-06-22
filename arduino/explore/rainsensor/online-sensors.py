@@ -21,7 +21,7 @@ import paho.mqtt.client as mqtt
 import requests
 
 # MQTT configuration
-STATION = "NL001A"  # Utrecht; NL000W: Alphen aan den Rijn
+STATION = "NL000W"  # Utrecht; NL001A: Alphen aan den Rijn
 MQTT_BROKER = "6831f8e4add443adb5ccd2fac74382e0.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883  # SSL/TLS port
 MQTT_USERNAME = "gmnstation"

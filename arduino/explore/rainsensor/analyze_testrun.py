@@ -19,13 +19,19 @@ def run():
                 date_format="ISO8601"
             ))
         else:
-            obsdate = datetime.strptime(path.name[:-4].split("-")[-1], "%d%m%y")
-            df = pd.read_csv(
+            df = (pd.read_csv(
                 path,
                 sep=r"\s+",
                 names=["datetime", "iswet", "t_amb", "t_sky"],
                 dtype={"iswet":  str, "t_sky": str}
-            ).apply(add_date, obsdate=obsdate, axis=1)
+            ))
+            obsdate = datetime.strptime(path.name[:-4].split("-")[-1], "%d%m%y")
+            dateshift_indices = list(df.loc[df.datetime == "00:00:00"].index)
+            if len(dateshift_indices) == 1:
+                dateshift_index = dateshift_indices[0]
+            else:
+                dateshift_index = len(df)
+            df = df.apply(add_date, obsdate=obsdate, dateshift_index=dateshift_index, axis=1)
             arduino_dfs.append(df)
     online_df = (
         pd.concat(online_dfs)
@@ -42,7 +48,10 @@ def run():
     )
     # Self built Arduino sprintf implementation can print the erroneous patterns +000.-4 and -001.-6
     arduino_df["t_sky"] = arduino_df["t_sky"].str.replace(
-        r"([+-]00)[\d][.]-([\d]+)", lambda m: m.group(1) + "1e-" + m.group(2), regex=True).astype(float)
+        r"([+-][\d]{3})[.]-([\d]+)",
+        lambda m: f"{m.group(1)}.{m.group(2)}" if m.group(2) != "10" else f"{int(m.group(1)) - 1}.0",
+        regex=True
+    ).astype(float)
     all_df = (
         pd.merge_asof(arduino_df, online_df, left_on="datetime", right_on="datetime_wet")
         .apply(interpolate_rain, axis=1)
@@ -81,14 +90,14 @@ def run():
     plt.show()
 
 
-def add_date(row, obsdate):
-    hours, minutes, seconds = row["datetime"].split(":")
-    if int(hours) >= 12:
-        days = 0
-    else:
+def add_date(row, obsdate, dateshift_index):
+    hours, minutes, seconds = row["datetime"].split(":")  # 16:32:00
+    rel_time = timedelta(hours=int(hours), minutes=int(minutes), seconds=int(seconds))
+    if row.name >= dateshift_index:
         days = 1
-    row["datetime"] = obsdate + timedelta(
-        days=int(days), hours=int(hours), minutes=int(minutes), seconds=int(seconds))
+    else:
+        days = 0
+    row["datetime"] = obsdate + timedelta(days=days) + rel_time
     return row
 
 
