@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-TESTRUN_DIR = "testrun-2025-06-14"
+TESTRUN_DIR = "testrun-2025-06-28"
 
 
 def run():
@@ -39,7 +39,8 @@ def run():
         .sort_values(by="datetime_wet")
         .reset_index(drop=True)
     )
-    if TESTRUN_DIR == "testrun-2025-06-02":   # Data not saved as UTC
+    # Data not saved as UTC
+    if TESTRUN_DIR <= "testrun-2025-06-28":
         online_df["datetime_wet"] = online_df["datetime_wet"] - timedelta(hours=2)
     arduino_df = (
         pd.concat(arduino_dfs)
@@ -61,7 +62,7 @@ def run():
     all_df["numwet"] = all_df["iswet"].apply(lambda x: len([c for c in x if c == '1']))
     print(all_df)  # .loc[all_df["iswet"] != "0000000000"])
     col_max = {
-        "nstars": 100.,
+        "nstars": 200.,
         "numwet": 10.,
         "deltaT": 40.,
         "t0": 6.,
@@ -70,12 +71,12 @@ def run():
     for col, max_val in col_max.items():
         all_df[col] = all_df[col] / max_val
     sns.set_theme(rc={'figure.figsize': (16., 8.)})
-    timerange1 = (all_df["datetime"] >= datetime(2025, 6, 14, 12, 0)) & \
-                (all_df["datetime"] <= datetime(2025, 6, 15, 4 ,0))
-    timerange2 = (all_df["datetime"] >= datetime(2025, 6, 15, 16, 0)) & \
-                (all_df["datetime"] <= datetime(2025, 6, 16, 8 ,0))
-    timerange3 = (all_df["datetime"] >= datetime(2025, 6, 18, 12, 0)) & \
-                (all_df["datetime"] <= datetime(2025, 6, 19, 4 ,0))
+    timerange1 = (all_df["datetime"] >= datetime(2025, 6, 29, 16, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 6, 30, 8,0))
+    timerange2 = (all_df["datetime"] >= datetime(2025, 7, 2, 14, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 7, 3, 6 ,0))
+    timerange3 = (all_df["datetime"] >= datetime(2025, 7, 4, 16, 0)) & \
+                (all_df["datetime"] <= datetime(2025, 7, 5, 8,0))
     rainplot = sns.lineplot(data=all_df.set_index('datetime')[col_max.keys()])
     rainplot.get_figure().savefig(Path(TESTRUN_DIR) / "rain0.png")
     plt.show()

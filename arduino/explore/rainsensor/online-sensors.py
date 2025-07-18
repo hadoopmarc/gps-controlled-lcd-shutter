@@ -101,7 +101,8 @@ def retrieve_predictions(latlon):
     # - predictions out of order -> does not matter
     rain_rates = [predictions.get(hm, -1) for hm in hms]
     # Astronomy wants time in UTC
-    predict_utc = predict_dt.replace(tzinfo=timezone.utc)
+    tz_timedelta = predict_dt.replace(tzinfo=timezone.utc).astimezone().tzinfo.utcoffset(predict_dt)
+    predict_utc = predict_dt - tz_timedelta
     return predict_utc, rain_rates
 
 
