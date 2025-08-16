@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-TESTRUN_DIR = "testrun-2025-06-28"
+TESTRUN_DIR = "testrun-2025-07-05"
 
 
 def run():
@@ -40,7 +40,7 @@ def run():
         .reset_index(drop=True)
     )
     # Data not saved as UTC
-    if TESTRUN_DIR <= "testrun-2025-06-28":
+    if TESTRUN_DIR <= "testrun-2025-07-05":
         online_df["datetime_wet"] = online_df["datetime_wet"] - timedelta(hours=2)
     arduino_df = (
         pd.concat(arduino_dfs)
