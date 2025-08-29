@@ -23,6 +23,7 @@
 #include <Adafruit_MLX90614.h>
 
 // #define DEBUG                        // Uncomment to have debug code executed
+#define TIMERSWITCH                     // Comment to operate without external 24H timer on/off switch
 #define SD_FAT_TYPE 1                   // For FAT16/FAT32
 #define USE_LONG_FILE_NAMES 1           // For encoding lat, lon and date
 #define SPI_SPEED SD_SCK_MHZ(4)         // Can be max 50 MHz
@@ -173,19 +174,20 @@ void loop() {
       Serial.println(line);
       line[63] = '\n';
       writeFile(logFile, line);
-      #ifdef DEBUG
+#ifdef DEBUG
       Serial.println("Write completed");
-      #endif
+#endif
     }
     iMeasure = 0;
-    #ifdef DEBUG
+#ifdef DEBUG
     if ((currentTime.minute % 5) == 0) {    // New file every 5 minutes
       currentTime.hour = 12;
       isCalibrated = false;
     }
-    #endif
+#endif
   }
 
+#ifndef TIMERSWITCH
   if (!isCalibrated && currentTime.hour == 12) {  // Occurs every noon during continuous operation
     // Recalibrate and set new log file at noon or later if not done for the current day
     // pinMode(rxPin, INPUT_PULLUP);  // The sdfat library or one of its dependencies interferes with this setting
@@ -195,6 +197,7 @@ void loop() {
   if (isCalibrated && currentTime.hour == 0) {    // Prepare for recalibration + logFile creation next noon
     isCalibrated = false;
   }
+#endif
 }
 
 void setGpsDependentVariables() {
@@ -298,10 +301,10 @@ void setGpsDependentVariables() {
   memcpy(logFile + 5, latitude, 4);
   memcpy(logFile + 10, longitude, 5);
   memcpy(logFile + 16, gpsDate, 6);
-  #ifdef DEBUG
+#ifdef DEBUG
   memcpy(logFile + 5, gpsTime, 4);
   memcpy(logFile + 10, "debug", 5);
-  #endif
+#endif
   Serial.print("Logfile: ");
   Serial.println(logFile);
 
