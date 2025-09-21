@@ -345,11 +345,7 @@ void writeFile(char *filename, char *line) {
 void dtostrfixed(float value, int min_width, int num_decimal, char buffer[]){
   // dtostrf() cannot output fixed format "+06.1f"
   int valueWhole = int(value);
-  int valueDecimal = int(round(10 * (value - valueWhole)));
-  if (valueDecimal == 10) {
-    valueDecimal = 0;
-    valueWhole++;
-  }
+  int valueDecimal = int(abs(10 * (value - valueWhole)));
   char format[16];
   sprintf(format, " %%+0%dd.%%%dd", min_width - num_decimal - 1, num_decimal);
   sprintf(buffer, format, valueWhole, valueDecimal);
