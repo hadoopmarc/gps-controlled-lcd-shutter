@@ -1,0 +1,21 @@
+
+.stAppToolbar {
+    display: none;
+}
+
+.stAppHeader {
+    display: none;
+}
+
+.st-emotion-cache-zy6yx3, .st-emotion-cache-3uj0rx h1 {
+    padding-top: 0rem !important;
+}
+/* https://discuss.streamlit.io/t/is-it-possible-to-create-a-sticky-header/33145/3 */
+div[data-testid="stVerticalBlock"] div:has(div.fixed-header) {
+    position: sticky;
+    background-color: white;
+    z-index: 999;
+}
+.fixed-header {
+    border-bottom: 1px solid black;
+}

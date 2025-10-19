@@ -13,6 +13,12 @@
 #
 # This script also retrieves the published number of visible stars from a nearby
 # RMS camera from the Global Meteor Network
+#
+# The script is best run on a standalone headless computing node (e.g. RPi).
+# Run as daemon from a ssh shell:
+# https://stackoverflow.com/questions/19233529/run-bash-script-as-daemon
+# setsid python online-sensors.py >/dev/null 2>&1 < /dev/null &
+# ToDo: run as startup daemon
 
 from datetime import datetime, timedelta, timezone
 import time

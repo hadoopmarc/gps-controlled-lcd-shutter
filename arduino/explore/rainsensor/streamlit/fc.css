@@ -1,6 +1,23 @@
+/* fc FullCalendar runs in an iframe */
+
+/* This puts day number and data summary on a single line */
+.fc-daygrid-day-frame {
+    overflow: hidden;
+}
+.fc-daygrid-day-top {
+    float: left;
+}
 .fc-daygrid-day-events {
-    font-family: Arial !important;
+    float: right;
+}
+
+/* below has possibly no function */
+body {
     line-height: 1;
+}
+.fc.fc-daygrid-day-events {
+    display: inline;
+    font-family: Arial !important;
 }
 .fc-event-past {
     opacity: 0.8;
@@ -9,7 +26,7 @@
     font-style: italic;
 }
 .fc-event-title {
-    font-family: Arial !important;
+/*    font-family: Arial !important; */
     line-height: 1;
 }
 .fc-toolbar-title {

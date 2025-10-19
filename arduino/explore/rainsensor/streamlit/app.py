@@ -11,14 +11,29 @@ from streamlit_calendar import calendar
 
 DATA_PATH = Path("streamlit") / "rain_data.parquet"
 
-with open("streamlit/rain.css") as f:
-    custom_css = "\n".join(f.readlines())
+with open("streamlit/app.css") as f:
+    app_css = "\n".join(f.readlines())
+with open("streamlit/fc.css") as f:
+    custom_css = " ".join(f.readlines())
+# custom_css="""
+# .fc-event-past {
+#     opacity: 0.8;
+# }
+# .fc-event-time {
+#     font-style: italic;
+# }
+# .fc-event-title {
+#     font-weight: 700;
+# }
+# .fc-toolbar-title {
+#     font-size: 5rem;
+# }
+# """
 
 calendar_options = {
-    "custom_css": custom_css,
     "timeZone": "UTC",  # https://fullcalendar.io/docs/timeZone
     "editable": "false",
-    "aspectRatio": 2.,
+    "aspectRatio": 3.,
     "navLinks": "false",
     "selectable": "true",
     "headerToolbar": {
@@ -57,16 +72,12 @@ def build_events(year_month):
 
 
 # =============== PAGE LAYOUT ====================
+st.markdown(f"<style> {app_css} </style>", unsafe_allow_html=True)
+st.set_page_config(layout="wide")
 
-st.title('Clear Sky Detector Utrecht')
-
-calendar_state = calendar(
-    events=build_events("2025-06"),
-    options=calendar_options,
-    key="daygrid",
-)
-if calendar_state.get("callback") == "eventClick":
-    st.session_state["selected_date"] = calendar_state["eventClick"]["event"]["start"]
+header = st.container()  # For sticky header with custom css
+header.title("Clear Sky Detector Utrecht")
+header.write("""<div class='fixed-header'/>""", unsafe_allow_html=True)
 
 
 @st.dialog("Sky photographs", width="large")
@@ -78,11 +89,11 @@ def show_photograph(skydatetime):
 # 600.000 punten crasht in browser (365 x 24 x 60 = 525.600)
 # Voorlopig pragmatisch: data voor een dag
 read_data()  # Be sure caching happens on startup
-selected_date = st.session_state.get("selected_date")
-if not selected_date:
-    selected_date = date.today().isoformat()
+chartdate = st.session_state.get("chartdate")
+if not chartdate:
+    chartdate = date.today().isoformat()
 df_chart = read_data()
-df_chart = df_chart.loc[df_chart.datetime.dt.strftime("%Y-%m-%d") == f"{selected_date}"]  # selected_date]
+df_chart = df_chart.loc[df_chart.datetime.dt.strftime("%Y-%m-%d") == chartdate]
 if len(df_chart) > 0:
     fig = px.scatter(
         df_chart,
@@ -93,15 +104,27 @@ if len(df_chart) > 0:
     fig.update_traces(marker=dict(size=3), mode="lines+markers")
     chart_state = st.plotly_chart(fig, on_select="rerun")
     try:
-        skydate = chart_state["selection"]["points"][0]["x"]
-        show_photograph(skydate)
+        photodate = chart_state["selection"]["points"][0]["x"]
+        if photodate != st.session_state.get("last_photodate"):
+            show_photograph(photodate)
+        st.session_state["last_photodate"] = photodate
     except IndexError:
         pass  # OK, no selection available
-    st.write(chart_state)
-    if calendar_state.get("callback") == "eventClick":
-        skydate = calendar_state["eventClick"]["event"]["start"]
-        st.write(skydate)
 
+calendar_state = calendar(
+    events=build_events("2025-06"),
+    options=calendar_options,
+    custom_css=custom_css,
+    key="daygrid",
+)
+if calendar_state.get("callback") == "eventClick":
+    st.session_state["chartdate"] = calendar_state["eventClick"]["event"]["start"]
+    st.rerun()
+
+try:
+    st.write(chart_state)
+except NameError:
+    pass  # OK, startup on date without data
 st.write(calendar_state)
 
 # Initial calendar_state:
