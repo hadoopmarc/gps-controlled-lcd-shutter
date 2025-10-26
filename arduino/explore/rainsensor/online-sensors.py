@@ -19,19 +19,22 @@
 # https://stackoverflow.com/questions/19233529/run-bash-script-as-daemon
 # setsid python online-sensors.py >/dev/null 2>&1 < /dev/null &
 # ToDo: run as startup daemon
-
+import os
 from datetime import datetime, timedelta, timezone
 import time
 
+from dotenv import load_dotenv
 import paho.mqtt.client as mqtt
 import requests
+
+load_dotenv()
 
 # MQTT configuration
 STATION = "NL000W"  # Utrecht; NL001A: Alphen aan den Rijn
 MQTT_BROKER = "6831f8e4add443adb5ccd2fac74382e0.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883  # SSL/TLS port
-MQTT_USERNAME = "gmnstation"
-MQTT_PASSWORD = "nejsyr-hacra6-hytkYj"
+MQTT_USERNAME = os.environ["MQTT_USERNAME"]
+MQTT_PASSWORD = os.environ["MQTT_PASSWORD"]
 MQTT_CLIENT_ID = f"rain_sensor_{STATION}"
 MQTT_BASE_TOPIC = "gmnstation"
 camera_status = "uninitialized"
