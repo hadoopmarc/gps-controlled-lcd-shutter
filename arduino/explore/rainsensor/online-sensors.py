@@ -17,8 +17,11 @@
 # The script is best run on a standalone headless computing node (e.g. RPi).
 # Run as daemon from a ssh shell:
 # https://stackoverflow.com/questions/19233529/run-bash-script-as-daemon
-# setsid python online-sensors.py >/dev/null 2>&1 < /dev/null &
+# setsid python online-sensors.py < /dev/null > /dev/null 2>&1 &
 # ToDo: run as startup daemon
+# RPi400 also has a defunct DNS resolv config, so add once:
+# sudo sh -c 'echo "nameserver 8.8.8.8" >> /etc/resolv.conf'
+
 import os
 from datetime import datetime, timedelta, timezone
 import time
@@ -26,6 +29,7 @@ import time
 from dotenv import load_dotenv
 import paho.mqtt.client as mqtt
 import requests
+from urllib3.util.retry import Retry
 
 load_dotenv()
 
@@ -37,7 +41,6 @@ MQTT_USERNAME = os.environ["MQTT_USERNAME"]
 MQTT_PASSWORD = os.environ["MQTT_PASSWORD"]
 MQTT_CLIENT_ID = f"rain_sensor_{STATION}"
 MQTT_BASE_TOPIC = "gmnstation"
-camera_status = "uninitialized"
 star_counts = []
 
 # Buienradar configuration
@@ -95,8 +98,17 @@ def retrieve_predictions(latlon):
 
     # Put predictions for rain rates in a lookup table by "hh:mm" values
     url = f"{SHOWER_URL}?{latlon}"
-    response = requests.get(url)
-    lines = response.text.split("\n")[:-1]
+    try:
+        with requests.Session() as session:
+            # https://urllib3.readthedocs.io/en/latest/reference/urllib3.util.html#module-urllib3.util.retry
+            retry = Retry(total=4, connect=3, backoff_factor=1)  # Beware of exceeding usage limits
+            adapter = requests.adapters.HTTPAdapter(max_retries=retry)
+            session.mount('https://', adapter)
+            response = session.get(url)
+        # response = requests.get(url)
+        lines = response.text.split("\n")[:-1]
+    except requests.exceptions.ConnectionError:
+        lines = []
     predictions = {}
     for line in lines:
         value, hm = line.split("|")
@@ -119,13 +131,10 @@ def process_star_counts():
     if star_counts:
         nstars = sum(star_counts) / len(star_counts)
         star_counts.clear()
-        if camera_status == "online":
-            return nstars
-        else:
-            return -1
+        return nstars
     else:
         print("Error, no star counts received!")
-        return -2
+        return -1
 
 
 def mqtt_connect():
@@ -164,12 +173,7 @@ def on_subscribe(_, __, mid, granted_qos):
 
 
 def on_message(_, __, msg):
-    if msg.topic.endswith("status"):
-        global camera_status
-        if camera_status != msg.payload.decode("utf8"):
-            camera_status = msg.payload.decode("utf8")
-            print(f"Camera is {camera_status}")
-    elif msg.topic.endswith("stars"):
+    if msg.topic.endswith("stars"):
         star_counts.append(int(msg.payload))
         print(msg.topic + " " + msg.payload.decode("utf8"))
 
@@ -178,3 +182,141 @@ if __name__ == "__main__":
     mqtt_connect()
     time.sleep(1)
     run()
+
+# Crashes op RPI400/Raspbian:
+# Traceback (most recent call last):
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connection.py", line 198, in _new_conn
+#     sock = connection.create_connection(
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/util/connection.py", line 60, in create_connection
+#     for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
+#   File "/usr/lib/python3.9/socket.py", line 953, in getaddrinfo
+#     for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+# socket.gaierror: [Errno -3] Temporary failure in name resolution
+#
+# The above exception was the direct cause of the following exception:
+#
+# Traceback (most recent call last):
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+#     response = self._make_request(
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+#     raise new_e
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+#     self._validate_conn(conn)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
+#     conn.connect()
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connection.py", line 753, in connect
+#     self.sock = sock = self._new_conn()
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connection.py", line 205, in _new_conn
+#     raise NameResolutionError(self.host, self, e) from e
+# urllib3.exceptions.NameResolutionError: <urllib3.connection.HTTPSConnection object at 0xf65a75f8>: Failed to resolve 'gps.buienradar.nl' ([Errno -3] Temporary failure in name resolution)
+#
+# The above exception was the direct cause of the following exception:
+#
+# Traceback (most recent call last):
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/adapters.py", line 644, in send
+#     resp = conn.urlopen(
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+#     retries = retries.increment(
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/util/retry.py", line 519, in increment
+#     raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+# urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='gps.buienradar.nl', port=443): Max retries exceeded with url: /getrr.php?lat=52.110425&lon=5.1434641 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0xf65a75f8>: Failed to resolve 'gps.buienradar.nl' ([Errno -3] Temporary failure in name resolution)"))
+#
+# During handling of the above exception, another exception occurred:
+#
+# Traceback (most recent call last):
+#   File "/home/pi/Projects/gps-controlled-lcd-shutter/arduino/explore/rainsensor/online-sensors.py", line 171, in <module>
+#     run()
+#   File "/home/pi/Projects/gps-controlled-lcd-shutter/arduino/explore/rainsensor/online-sensors.py", line 53, in run
+#     predict_dt, rain_values = retrieve_predictions(BIKO_LATLON)
+#   File "/home/pi/Projects/gps-controlled-lcd-shutter/arduino/explore/rainsensor/online-sensors.py", line 89, in retrieve_predictions
+#     response = requests.get(url)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/api.py", line 73, in get
+#     return request("get", url, params=params, **kwargs)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/api.py", line 59, in request
+#     return session.request(method=method, url=url, **kwargs)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/sessions.py", line 589, in request
+#     resp = self.send(prep, **send_kwargs)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/sessions.py", line 703, in send
+#     r = adapter.send(request, **kwargs)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/adapters.py", line 677, in send
+#     raise ConnectionError(e, request=request)
+# requests.exceptions.ConnectionError: HTTPSConnectionPool(host='gps.buienradar.nl', port=443): Max retries exceeded with url: /getrr.php?lat=52.110425&lon=5.1434641 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0xf65a75f8>:
+# Failed to resolve 'gps.buienradar.nl' ([Errno -3] Temporary failure in name resolution)"))
+
+# Drukke tijd op buienradar? Need additional backoff loop!
+#
+# gmnstation/NL000W/stars 0
+# gmnstation/NL000W/stars 0
+# 2025-10-26 14:44:00.4
+# gmnstation/NL000W/stars 0
+# gmnstation/NL000W/stars 0
+# gmnstation/NL000W/stars 0
+# 2025-10-26 14:49:00.1
+# ...
+# gmnstation/NL000W/stars 0
+# gmnstation/NL000W/stars 0
+# 2025-10-27 13:44:00.2
+# gmnstation/NL000W/stars 0
+# gmnstation/NL000W/stars 0
+# gmnstation/NL000W/stars 0
+# 2025-10-27 13:49:00.4
+# gmnstation/NL000W/stars 0
+# gmnstation/NL000W/stars 0
+# 2025-10-27 13:54:00.1
+# Traceback (most recent call last):
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connection.py", line 198, in _new_conn
+#     sock = connection.create_connection(
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/util/connection.py", line 85, in create_connection
+#     raise err
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/util/connection.py", line 73, in create_connection
+#     sock.connect(sa)
+# OSError: [Errno 101] Network is unreachable
+#
+# The above exception was the direct cause of the following exception:
+#
+# Traceback (most recent call last):
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+#     response = self._make_request(
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 488, in _make_request
+#     raise new_e
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+#     self._validate_conn(conn)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
+#     conn.connect()
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connection.py", line 753, in connect
+#     self.sock = sock = self._new_conn()
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connection.py", line 213, in _new_conn
+#     raise NewConnectionError(
+# urllib3.exceptions.NewConnectionError: <urllib3.connection.HTTPSConnection object at 0xf5dfb238>: Failed to establish a new connection: [Errno 101] Network is unreachable
+#
+# The above exception was the direct cause of the following exception:
+#
+# Traceback (most recent call last):
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/adapters.py", line 644, in send
+#     resp = conn.urlopen(
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+#     retries = retries.increment(
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/urllib3/util/retry.py", line 519, in increment
+#     raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+# urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='gps.buienradar.nl', port=443): Max retries exceeded with url: /getrr.php?lat=52.110425&lon=5.1434641 (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf5dfb238>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+#
+# During handling of the above exception, another exception occurred:
+#
+# Traceback (most recent call last):
+#   File "/home/pi/Projects/gps-controlled-lcd-shutter/arduino/explore/rainsensor/online-sensors.py", line 171, in <module>
+#     run()
+#   File "/home/pi/Projects/gps-controlled-lcd-shutter/arduino/explore/rainsensor/online-sensors.py", line 53, in run
+#     predict_dt, rain_values = retrieve_predictions(BIKO_LATLON)
+#   File "/home/pi/Projects/gps-controlled-lcd-shutter/arduino/explore/rainsensor/online-sensors.py", line 89, in retrieve_predictions
+#     response = requests.get(url)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/api.py", line 73, in get
+#     return request("get", url, params=params, **kwargs)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/api.py", line 59, in request
+#     return session.request(method=method, url=url, **kwargs)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/sessions.py", line 589, in request
+#     resp = self.send(prep, **send_kwargs)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/sessions.py", line 703, in send
+#     r = adapter.send(request, **kwargs)
+#   File "/home/pi/venv/rain/lib/python3.9/site-packages/requests/adapters.py", line 677, in send
+#     raise ConnectionError(e, request=request)
+# requests.exceptions.ConnectionError: HTTPSConnectionPool(host='gps.buienradar.nl', port=443): Max retries exceeded with url: /getrr.php?lat=52.110425&lon=5.1434641 (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0xf5dfb238>: Failed to establish a new connection: [Errno 101] Network is unreachable'))

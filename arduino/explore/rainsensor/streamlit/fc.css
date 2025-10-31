@@ -1,4 +1,4 @@
-/* fc FullCalendar runs in an iframe */
+/* fc FullCalendar runs in an iframe so needs separate css file */
 
 /* This puts day number and data summary on a single line */
 .fc-daygrid-day-frame {
@@ -11,33 +11,13 @@
     float: right;
 }
 
-/* below has possibly no function */
-body {
-    line-height: 1;
+/* Other stylings */
+.fc-button {
+  box-shadow: none !important;
 }
-.fc.fc-daygrid-day-events {
-    display: inline;
-    font-family: Arial !important;
+a.fc-daygrid-day-number {
+  text-decoration: none;
 }
-.fc-event-past {
-    opacity: 0.8;
-}
-.fc-event-time {
-    font-style: italic;
-}
-.fc-event-title {
-/*    font-family: Arial !important; */
-    line-height: 1;
-}
-.fc-toolbar-title {
-    font-size: 2rem;
-}
-.fc-h-event { /* allowed to be top-level */
-    display: block;
-    line-heiht: 1;
-    height: 20px !important;
-    border: 2px solid #3788d8;
-    border: 2px solid var(--fc-event-border-color, #3788d8);
-    background-color: #3788d8;
-    background-color: var(--fc-event-bg-color, #3788d8)
+a.fc-col-header-cell-cushion {
+  text-decoration: none;
 }
