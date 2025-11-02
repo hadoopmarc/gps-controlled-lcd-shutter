@@ -10,6 +10,9 @@
 .fc-daygrid-day-events {
     float: right;
 }
+.fc-event-title-container {
+    margin-top: 2px;
+}
 
 /* Other stylings */
 .fc-button {

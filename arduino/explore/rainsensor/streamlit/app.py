@@ -3,7 +3,9 @@
 
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
+import os
 from pathlib import Path
+import time
 
 import pandas as pd
 import plotly.express as px
@@ -17,21 +19,6 @@ with open("streamlit/app.css") as f:
 with open("streamlit/fc.css") as f:
     custom_css = " ".join(f.readlines())
 
-calendar_options = {
-    "timeZone": "UTC",  # https://fullcalendar.io/docs/timeZone
-    "editable": "false",
-    "contentHeight": "200px",  # Full month without scrollbar
-    "navLinksDayClick": "false",
-    "selectable": "true",
-    "headerToolbar": {
-        "left": "prev,next",
-        "center": "title",
-        "right": "today",
-    },
-    "initialDate": "2025-07-01",
-    "initialView": "dayGridMonth",
-}
-
 
 @st.cache_data
 def read_data():
@@ -39,8 +26,13 @@ def read_data():
     return df
 
 
-def build_events(year_month):
-    year, month = year_month.split("-")
+def recent_date():
+    df = read_data()
+    return df.iloc[-1]["datetime"].date()
+
+
+def build_events(yearmonth):
+    year, month = yearmonth.split("-")
     start_time = datetime(int(year), int(month), 1, 12, minute=0, second=0)
     end_time = start_time + relativedelta(months=1)
     df = read_data()
@@ -51,7 +43,7 @@ def build_events(year_month):
         nwet = df.loc[(df.datetime.dt.date == day) & (df.numwet > 0)].size
         month_events.append(
             {
-                "title": f"{nclear}:{nwet}",
+                "title": f"c{nclear}:w{nwet}",
                 "color": "#FF6C6C",
                 "start": day.strftime('%Y-%m-%d'),
             }
@@ -62,6 +54,22 @@ def build_events(year_month):
 @st.dialog("Sky photograph", width="large")
 def show_photograph(skydatetime):
     st.image("streamlit/lemmon.png", width=1024)
+
+
+calendar_options = {
+    "timeZone": "UTC",  # https://fullcalendar.io/docs/timeZone
+    "editable": "false",
+    "contentHeight": "240px",  # Full month without scrollbar
+    "navLinksDayClick": "false",
+    "selectable": "false",
+    "headerToolbar": {
+        "left": "prev,next",
+        "center": "title",
+        "right": "today",
+    },
+    "initialDate": recent_date().strftime('%Y-%m-%d'),
+    "initialView": "dayGridMonth",
+}
 
 
 def run():
@@ -76,9 +84,7 @@ def run():
     # 600.000 punten crasht in browser (365 x 24 x 60 = 525.600)
     # Voorlopig pragmatisch: data voor een dag
     read_data()  # Be sure caching happens on startup
-    chartdate = st.session_state.get("chartdate")
-    if not chartdate:
-        chartdate = date.today().isoformat()
+    chartdate = st.session_state.get("chartdate", recent_date().strftime('%Y-%m-%d'))
     year, month, day = chartdate.split("-")
     start_time = datetime(int(year), int(month), int(day), 12, minute=0, second=0)
     end_time = start_time + relativedelta(days=1)
@@ -109,73 +115,46 @@ def run():
                 st.session_state["last_photodate"] = photodate
         except IndexError:
             pass  # OK, no selection available
-
+    yearmonth = st.session_state.get("yearmonth", "2025-06")
     calendar_state = calendar(
-        events=build_events("2025-06"),
+        events=build_events(yearmonth),
+        # """
+        #     function(info, successCallback, failureCallback) {
+        #         window.alert("sometext");
+        #         return []
+        #     }
+        # """,
         options=calendar_options,
         custom_css=custom_css,
         key="daygrid",
     )
+    if os.getenv("DEBUG"):
+        print(f"Callback: {calendar_state.get('callback')} {time.time()}")
+
+    if calendar_state.get("callback") == "eventsSet":
+        # Conditional to prevent endless loop
+        yearmonth = calendar_state["eventsSet"]["view"]["currentStart"][:7]
+        current_events = calendar_state["eventsSet"]["events"]
+        current_dates = [x["start"] for x in current_events]
+        if st.session_state.get("yearmont") != yearmonth:
+            st.session_state["yearmonth"] = yearmonth
+            expected_events = build_events(yearmonth)
+            expected_dates = [x["start"] for x in expected_events]
+            if expected_dates != current_dates:
+                st.rerun()
     if calendar_state.get("callback") == "eventClick":
         # Conditional to prevent endless loop
         if st.session_state.get("chartdate") != calendar_state["eventClick"]["event"]["start"]:
             st.session_state["chartdate"] = calendar_state["eventClick"]["event"]["start"]
             st.rerun()
 
-    try:
-        st.write(chart_state)
-    except NameError:
-        pass  # OK, happens on startup when no data are available for the current date
-    st.write(calendar_state)
+    if os.getenv("DEBUG"):
+        try:
+            st.write(chart_state)
+        except NameError:
+            pass  # OK, happens on startup when no data are available for the current date
+        st.write(calendar_state)
 
 
 if __name__ == "__main__":
     run()
-
-# Initial calendar_state:
-# {
-#   "callback": "eventsSet",
-#   "eventsSet": {
-#     "events": [
-#       {
-#         "allDay": true,
-#         "title": "24h",
-#         "start": "2025-07-03",
-#         "backgroundColor": "#FF6C6C",
-#         "borderColor": "#FF6C6C"
-#       }
-#     ],
-#     "view": {
-#       "type": "dayGridMonth",
-#       "title": "June 2025",
-#       "activeStart": "2025-05-31T22:00:00.000Z",
-#       "activeEnd": "2025-07-12T22:00:00.000Z",
-#       "currentStart": "2025-05-31T22:00:00.000Z",
-#       "currentEnd": "2025-06-30T22:00:00.000Z"
-#     }
-#   }
-# }
-
-# After day click:
-# {
-#   "callback": "eventsSet",
-#   "eventsSet": {
-#     "events": [
-#       {
-#         "allDay": true,
-#         "title": "24h",
-#         "start": "2025-07-03",
-#         "backgroundColor": "#FF6C6C",
-#         "borderColor": "#FF6C6C"
-#       }
-#     ],
-#     "view": {
-#       "type": "dayGridDay",
-#       "title": "June 23, 2025",
-#       "activeStart": "2025-06-22T22:00:00.000Z",
-#       "activeEnd": "2025-06-23T22:00:00.000Z",
-#       "currentStart": "2025-06-22T22:00:00.000Z",
-#       "currentEnd": "2025-06-23T22:00:00.000Z"
-#     }
-#   }
-# }
