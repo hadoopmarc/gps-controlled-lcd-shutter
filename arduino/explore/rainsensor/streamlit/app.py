@@ -118,12 +118,6 @@ def run():
     yearmonth = st.session_state.get("yearmonth", "2025-06")
     calendar_state = calendar(
         events=build_events(yearmonth),
-        # """
-        #     function(info, successCallback, failureCallback) {
-        #         window.alert("sometext");
-        #         return []
-        #     }
-        # """,
         options=calendar_options,
         custom_css=custom_css,
         key="daygrid",
