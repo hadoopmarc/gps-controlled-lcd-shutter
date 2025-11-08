@@ -17,6 +17,7 @@
 # The script is best run on a standalone headless computing node (e.g. RPi).
 # Run as daemon from a ssh shell:
 # https://stackoverflow.com/questions/19233529/run-bash-script-as-daemon
+# . ~/venv/rain/bin/activate
 # setsid python online-sensors.py < /dev/null > /dev/null 2>&1 &
 # ToDo: run as startup daemon
 # RPi400 also has a defunct DNS resolv config, so add once:
