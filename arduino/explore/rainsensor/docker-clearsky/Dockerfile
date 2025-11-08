@@ -1,12 +1,13 @@
+# Running the clearsky webapp requires the Docker or Podman Desktop software on your machine.
 # If you already have docker engine or docker desktop installed, you can replace "podman"
-# by "docker" in all commands below. Otherwise, install podman desktop from:
-# https://podman-desktop.io/docs/installation
+# by "docker" in all commands below. Otherwise, install Podman Desktop from:
+#     https://podman-desktop.io/docs/installation
 #
-# Start podman desktop and leave it alone
-# Start a CMD terminal
+# Start Podman Desktop and leave it alone (if you ever installed Docker, it already runs as a service)
+# Start a CMD terminal (Microsoft Windows) or a shell (Linux, MacOS)
 #
 # Without cloned git repository
-# podman build --tag clearsky --no-cache https://github.com/hadoopmarc/gps-controlled-lcd-shutter/tree/rainsensor/arduino/explore/rainsensor/docker-clearsky
+# podman build --tag clearsky --no-cache -f https://raw.githubusercontent.com/hadoopmarc/gps-controlled-lcd-shutter/refs/heads/rainsensor/arduino/explore/rainsensor/docker-clearsky/Dockerfile .
 #
 # With cloning the git repository
 # git clone https://github.com/hadoopmarc/gps-controlled-lcd-shutter.git
