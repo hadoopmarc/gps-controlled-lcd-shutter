@@ -8,3 +8,4 @@ stm32/**
 fp-info-cache
 **/.idea
 **/.streamlit
+**/data

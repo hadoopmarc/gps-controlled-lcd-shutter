@@ -17,6 +17,9 @@
 #
 # podman image list
 # podman run -p 8501:8501 clearsky
+#
+# Run with data file located on the localhost
+# podman run -p 8501:8501 -v C:\Users\marcd\Projects\gps-controlled-lcd-shutter\arduino\explore\rainsensor\data:/app/arduino/explore/rainsensor/data  clearsky
 
 FROM python:3.13-slim
 

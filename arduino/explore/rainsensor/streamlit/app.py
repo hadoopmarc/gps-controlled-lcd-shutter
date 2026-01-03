@@ -1,4 +1,7 @@
-from datetime import date, datetime
+"""Run as:
+ streamlit run streamlit/app.py
+"""
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import os
 from pathlib import Path
@@ -40,8 +43,8 @@ def build_events(yearmonth):
     df = df.loc[(df.datetime >= start_time) & (df.datetime <= end_time)]
     month_events = []
     for day in list(df.datetime.dt.date.drop_duplicates())[:-1]:
-        nclear = df.loc[(df.datetime.dt.date == day) & (df.deltaT > 0.5)].size
-        nwet = df.loc[(df.datetime.dt.date == day) & (df.numwet > 0)].size
+        nclear = len(df.loc[(df.datetime.dt.date == day) & (df.deltaT > 0.5)])
+        nwet = len(df.loc[(df.datetime.dt.date == day) & (df.numwet > 0)])
         month_events.append(
             {
                 "title": f"c{nclear}:w{nwet}",
@@ -94,8 +97,8 @@ def run():
     if len(df_chart) > 0:
         fig = px.scatter(
             df_chart,
-            x=df_chart.datetime,
-            y=[df_chart.nstars, df_chart.numwet, df_chart.deltaT, df_chart.t0, df_chart.t1],
+            x="datetime",
+            y=["nstars", "numwet", "deltaT", "t0", "t1"],
             width=1200,
         )
         fig.update_traces(marker=dict(size=3), mode="lines+markers")

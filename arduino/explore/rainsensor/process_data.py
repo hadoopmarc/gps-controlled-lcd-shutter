@@ -22,6 +22,7 @@ def run():
     online_dfs = []
     arduino_dfs = []
     for path in Path(RAW_DIR).glob("*.csv"):
+        print(f"Start processing {path}")
         if "buien" in path.name:
             online_dfs.append(pd.read_csv(
                 path,
@@ -43,6 +44,7 @@ def run():
                 dateshift_index = len(df)
             df = df.apply(add_date, obsdate=obsdate, dateshift_index=dateshift_index, axis=1)
             arduino_dfs.append(df)
+        print(f"Finished processing {path}")
 
     # Online data
     online_df = (
