@@ -96,7 +96,7 @@ def run():
         all_df[col] = all_df[col].apply(lambda x: x / max_val if x != -1 else np.nan)
     all_df.to_parquet(Path("data", "rain_data.parquet"))
     # Only run once when data format changes
-    # all_df.tail(10000).to_parquet(Path("streamlit", "rain_data_sample.parquet"))
+    # all_df.tail(10000).to_parquet(Path("clearsky", "rain_data_sample.parquet"))
     print(all_df)
 
 

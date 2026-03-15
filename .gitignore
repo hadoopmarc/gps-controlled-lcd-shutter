@@ -6,6 +6,7 @@ datasheet/**
 presentation/**
 stm32/**
 fp-info-cache
+**/__pycache__
 **/.idea
 **/.streamlit
 **/data

@@ -7,17 +7,21 @@ import os
 from pathlib import Path
 import time
 
+from dotenv import load_dotenv
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 from streamlit_calendar import calendar
 
-DATA_PATH = Path("data") / "rain_data.parquet"  # mount point for user data in Docker
-SAMPLE_PATH = Path("streamlit") / "rain_data_sample.parquet"
+from read_wireguard import get_en_image_path
 
-with open("streamlit/app.css") as f:
+load_dotenv()
+DATA_PATH = Path("data") / "rain_data.parquet"  # mount point for user data in Docker
+SAMPLE_PATH = Path("clearsky/rain_data_sample.parquet")
+
+with open("clearsky/app.css") as f:
     app_css = "\n".join(f.readlines())
-with open("streamlit/fc.css") as f:
+with open("clearsky/fc.css") as f:
     custom_css = " ".join(f.readlines())
 
 
@@ -56,8 +60,11 @@ def build_events(yearmonth):
 
 
 @st.dialog("Sky photograph", width="large")
-def show_photograph(skydatetime):
-    st.image("streamlit/lemmon.png", width=1024)
+def show_photograph(skydatetime: datetime):
+    assert type(skydatetime) is datetime
+    # skydatetime = datetime.fromisoformat("2026-01-20 17:44:44")
+    image_path = get_en_image_path(skydatetime)
+    st.image(image_path, width=1024)
 
 
 calendar_options = {
@@ -113,7 +120,7 @@ def run():
         try:
             points = chart_state["selection"]["points"]
             if len(points) == 1:  # maybe unnecessary now selection_mode is added
-                photodate = points[0]["x"]
+                photodate = datetime.fromisoformat(points[0]["x"])
                 if photodate != st.session_state.get("last_photodate"):
                     show_photograph(photodate)
                 st.session_state["last_photodate"] = photodate
