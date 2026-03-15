@@ -59,12 +59,22 @@ def build_events(yearmonth):
     return month_events
 
 
-@st.dialog("Sky photograph", width="large")
+@st.dialog("Sky photograph", width="large", dismissible=False)
 def show_photograph(skydatetime: datetime):
     assert type(skydatetime) is datetime
-    # skydatetime = datetime.fromisoformat("2026-01-20 17:44:44")
-    image_path = get_en_image_path(skydatetime)
-    st.image(image_path, width=1024)
+    progress_text = "Downloading image..."
+    image_progress = st.progress(0, text=progress_text)
+
+    def update_progress(transferred: int, tobe_transferred: int):
+        completed = transferred / tobe_transferred
+        image_progress.progress(completed, text=progress_text)
+
+    image_path = get_en_image_path(skydatetime, update_progress)
+    image = st.image(image_path, width=1024)
+    image_progress.empty()
+    if st.button("Close"):
+        image.empty()
+        st.rerun()
 
 
 calendar_options = {

@@ -8,7 +8,6 @@ ssh2-python low level
 ssh2-parallel
 """
 from datetime import date, datetime, timedelta
-from stat import S_ISDIR, S_ISREG
 import os
 from pathlib import Path
 
@@ -50,13 +49,17 @@ def _download_en_image(ut_datetime: datetime, callback):
         key_filename=os.getenv("EN_PRIVATE_KEY")
     )
     sftp = ssh.open_sftp()
-    remote_year_dir = f"/data/{ut_datetime.year}"
+    # Remote folders are named according to the date in the evening
+    folder_datetime = ut_datetime
+    if folder_datetime.hour < 12:
+        folder_datetime -= timedelta(days=1)
+    year_folder = f"/data/{folder_datetime.year}"
     entry = None  # Causes TypeError below if no valid entry found in the loop
-    for entry in sftp.listdir(remote_year_dir):
-        if entry.startswith(ut_datetime.date().isoformat()):
+    for entry in sftp.listdir(year_folder):
+        if entry.startswith(folder_datetime.date().isoformat()):
             break
-    remote_day_dir = os.path.join(remote_year_dir, entry)
-    for entry in sftp.listdir(remote_day_dir):
+    day_folder = os.path.join(year_folder, entry)
+    for entry in sftp.listdir(day_folder):
         if not entry.endswith(".jpg"):
             continue
         parts = entry.split("_")
@@ -64,11 +67,11 @@ def _download_en_image(ut_datetime: datetime, callback):
         iso_time = parts[3][:8].replace("-", ":")
         remote_datetime = datetime.fromisoformat(f"{iso_date} {iso_time}")
         if timedelta(0) <= ut_datetime - remote_datetime <= MAX_TIMEDELTA:
-            remote_image_path = os.path.join(remote_day_dir, entry)
+            remote_image_path = os.path.join(day_folder, entry)
             local_image_dir = os.path.join(
                 os.getenv("EN_CACHE_DIR"), str(ut_datetime.year), str(ut_datetime.date().isoformat()))
             local_image_fname = "_".join([os.getenv("EN_STATION"), parts[2], parts[3][:8] + ".jpg"])
-            os.makedirs(local_image_dir)
+            os.makedirs(local_image_dir, exist_ok=True)
             local_image_path = os.path.join(local_image_dir, local_image_fname)
             print(f"Start downloading from {remote_image_path} to {local_image_path}")
             sftp.get(remote_image_path, local_image_path, callback=callback)
@@ -87,10 +90,6 @@ def _local_image_path(ut_datetime: datetime) -> Path:
     raise CachedImageException()
 
 
-def progress(transferred: int, tobe_transferred: int):
-    print(f"Download progress: {(100 * transferred) / tobe_transferred:.1f}%")
-
-
 class CachedImageException(Exception):
     pass
 
@@ -101,4 +100,10 @@ class RemoteImageException(Exception):
 
 if __name__ == "__main__":
     load_dotenv()
+
+
+    def progress(transferred: int, tobe_transferred: int):
+        print(f"Download progress: {(100 * transferred) / tobe_transferred:.1f}%")
+
+
     get_en_image_path(datetime(2026, 1, 20, 17, 45, 25), progress)
