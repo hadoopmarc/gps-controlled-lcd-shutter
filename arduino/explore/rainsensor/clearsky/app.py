@@ -1,7 +1,7 @@
 """Run as:
  streamlit run streamlit/app.py
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import os
 from pathlib import Path
@@ -47,11 +47,18 @@ def build_events(yearmonth):
     df = df.loc[(df.datetime >= start_time) & (df.datetime <= end_time)]
     month_events = []
     for day in list(df.datetime.dt.date.drop_duplicates())[:-1]:
-        nclear = len(df.loc[(df.datetime.dt.date == day) & (df.deltaT > 0.5)])
-        nwet = len(df.loc[(df.datetime.dt.date == day) & (df.numwet > 0)])
+        # A day in the calendar is displayed as a diagram from
+        # "x 12:00 UT" until "x+1 12:00 UT"
+        period_24h = (
+            (df.datetime >= (datetime.fromordinal(day.toordinal()) + timedelta(hours=12)))
+            & (df.datetime < (datetime.fromordinal(day.toordinal()) + timedelta(hours=36)))
+        )
+        nclear = len(df.loc[period_24h & (df.deltaT > 0.5)])
+        nwet = len(df.loc[period_24h & (df.numwet > 0)])
+        nstars = len(df.loc[period_24h & (df.nstars > 0.02)])
         month_events.append(
             {
-                "title": f"c{nclear}:w{nwet}",
+                "title": f"c{nclear} : w{nwet} : s{nstars}",
                 "color": "#FF6C6C",
                 "start": day.strftime('%Y-%m-%d'),
             }
