@@ -7,17 +7,18 @@ Simplifying assumptions for processing:
  - time ranges of a physical data file may overlap with these from multiple
    online data files, and vice versa
 """
-
+import argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 RAW_DIR = "data/raw"
 
 
-def run():
+def run(station_no):
     # Read csv
     online_dfs = []
     arduino_dfs = []
@@ -36,7 +37,7 @@ def run():
                 names=["datetime", "iswet", "t_amb", "t_sky"],
                 dtype={"iswet":  str, "t_sky": str}
             ))
-            obsdate = datetime.strptime(path.name[:-4].split("-")[-1], "%d%m%y")
+            obsdate = datetime.strptime(path.name.split("-")[-1][:6], "%d%m%y")
             dateshift_indices = list(df.loc[df.datetime == "00:00:00"].index)
             if len(dateshift_indices) == 1:
                 dateshift_index = dateshift_indices[0]
@@ -53,11 +54,12 @@ def run():
         .reset_index(drop=True)
     )
     # Data before 2025-07-07 were not saved as UTC
-    no_utc = datetime(2025,7,7)
+    print("Start data interpolation")
+    no_utc = datetime(2025, 7, 7)
     online_df.loc[online_df.datetime < no_utc, "datetime"] = \
         online_df.loc[online_df.datetime < no_utc, "datetime"] - timedelta(hours=2)
     interpolated_dfs = [online_df]
-    for dt in range(1,5):
+    for dt in tqdm(range(1, 5)):
         shifted_df = online_df.loc[:].apply(interpolate_rain, dt=dt, axis=1)
         interpolated_dfs.append(shifted_df)
     online_df = pd.concat(interpolated_dfs).sort_values(by="datetime").reset_index(drop=True)
@@ -94,9 +96,9 @@ def run():
     }
     for col, max_val in col_max.items():
         all_df[col] = all_df[col].apply(lambda x: x / max_val if x != -1 else np.nan)
-    all_df.to_parquet(Path("data", "rain_data.parquet"))
+    all_df.to_parquet(Path("data", f"clearsky_data_{station_no}.parquet"))
     # Only run once when data format changes
-    # all_df.tail(10000).to_parquet(Path("clearsky", "rain_data_sample.parquet"))
+    # all_df.tail(10000).to_parquet(Path("clearsky", "clearsky_data_sample.parquet"))
     print(all_df)
 
 
@@ -121,4 +123,7 @@ def interpolate_rain(row, dt):
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("en_station", type=int, help="EN station 900 <= int < 1000")
+    args = parser.parse_args()
+    run(args.en_station)
