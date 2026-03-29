@@ -14,10 +14,11 @@ import plotly.express as px
 import streamlit as st
 from streamlit_calendar import calendar
 
-from read_wireguard import get_en_image_path
+from read_wireguard import get_en_image_path, RemoteImageException
 
 load_dotenv()
 SAMPLE_PATH = Path("clearsky/clearsky_data_sample.parquet")
+dialog_datetime = None
 
 with open("clearsky/app.css") as f:
     app_css = "\n".join(f.readlines())
@@ -67,8 +68,9 @@ def build_events(station_no, yearmonth):
 
 
 @st.dialog("Sky photograph", width="large", dismissible=False)
-def show_photograph(skydatetime: datetime):
+def show_photograph(station_no, skydatetime: datetime):
     assert type(skydatetime) is datetime
+    st.write(skydatetime)
     progress_text = "Downloading image..."
     image_progress = st.progress(0, text=progress_text)
 
@@ -76,11 +78,17 @@ def show_photograph(skydatetime: datetime):
         completed = transferred / tobe_transferred
         image_progress.progress(completed, text=progress_text)
 
-    image_path = get_en_image_path(skydatetime, update_progress)
-    image = st.image(image_path, width=1024)
+    try:
+        image_path = get_en_image_path(station_no, skydatetime, update_progress)
+        image = st.image(image_path, width=1024)
+    except RemoteImageException:
+        st.write("No image available for this date and time")
     image_progress.empty()
     if st.button("Close"):
-        image.empty()
+        try:
+            image.empty()
+        except Exception:
+            pass
         st.rerun()
 
 
@@ -106,7 +114,7 @@ def run(station_no):
     st.set_page_config(layout="wide")
 
     header = st.container()  # For sticky header with custom css
-    header.title("Clear Sky Detector Utrecht")
+    header.title(f"Clear Sky Detector EN{station_no}")
     header.write("""<div class='fixed-header'/>""", unsafe_allow_html=True)
 
     # Chart can just plot 60.000 points (31 x 24 x 60 = 44.640)
@@ -139,7 +147,7 @@ def run(station_no):
         if len(points) == 1:  # maybe unnecessary now selection_mode is added
             photodate = datetime.fromisoformat(points[0]["x"])
             if photodate != st.session_state.get("last_photodate"):
-                show_photograph(photodate)
+                show_photograph(station_no, photodate)
             st.session_state["last_photodate"] = photodate
     except IndexError:
         pass  # OK, no selection available
@@ -180,6 +188,6 @@ def run(station_no):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("en_station", type=int, help="EN station 900 <= int < 1000")
+    parser.add_argument("en_station", type=str, help="EN station 900 <= int < 1000")
     args = parser.parse_args()
     run(args.en_station)

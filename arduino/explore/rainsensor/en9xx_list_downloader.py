@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import subprocess
 
 
@@ -9,7 +10,9 @@ def run():
         downloads = [x.replace("\n", "") for x in f.readlines()]
     for download in downloads:
         print("Start downloading", download)
-        subprocess.call(["..\\..\\..\\..\\dev\\en9xx_downloader.exe", *download.split(" ")])
+        station_no, date = download.split(" ")
+        if not list((Path(station_no) / date[:4]).glob(f"{date[:10]}*")):
+            subprocess.call(["..\\..\\..\\..\\dev\\en9xx_downloader.exe", station_no, date])
 
 
 if __name__ == "__main__":
