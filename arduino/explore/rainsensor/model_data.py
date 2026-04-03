@@ -63,20 +63,19 @@ def run(station_no):
     optimize_df.reset_index(inplace=True)
     optimize_df["abs_diff"] = (optimize_df["clear-line"] - optimize_df["wet-line"]).abs()
     optirow = optimize_df.sort_values(by="abs_diff", ascending=True).iloc[0]
-    opti_deltaT = optirow["deltaT"]
     print(optirow)
 
     # Write lists of critical minutes to xlsx
     # xlsx_night_path = Path("data") / "model" / "all_nights.xlsx"
     # night_df.to_excel(xlsx_night_path)
-    xlsx_w060_path = Path("data") / "model" / "wetline060.xlsx"
+    xlsx_w060_path = Path("data") / "model" / f"wetline060-{station_no}.xlsx"
     df_w060 = night_df.loc[(night_df.numwet > 0) & (0.60 <= night_df.deltaT)]
     df_w060.to_excel(xlsx_w060_path)
     print(f"Critical minutes for wetline, all: {len(night_df)}, "
           f"wet: {len(night_df.loc[(night_df.numwet > 0)])}, deltaT>=0.60: {len(df_w060)}")
 
-    xlsx_c060_path = Path("data") / "model" / "clearline06.xlsx"
-    df_c060 = night_df.loc[(night_df.nstars >= 0.05) & (night_df.deltaT >= 0.54) & (night_df.deltaT < 0.60)]
+    xlsx_c060_path = Path("data") / "model" / f"clearline060-{station_no}.xlsx"
+    df_c060 = night_df.loc[(night_df.nstars >= 0.05) & (night_df.deltaT < 0.60)]
     df_c060.to_excel(xlsx_c060_path)
     print(f"Critical minutes for clearline, all: {len(night_df)}, "
           f"stars: {len(night_df.loc[(night_df.nstars >= 0.05)])}, 0.54<=deltaT<0.60: {len(df_c060)}")

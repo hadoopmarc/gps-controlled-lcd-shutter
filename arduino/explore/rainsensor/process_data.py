@@ -97,6 +97,7 @@ def run(station_no):
     for col, max_val in col_max.items():
         all_df[col] = all_df[col].apply(lambda x: x / max_val if x != -1 else np.nan)
     all_df.to_parquet(Path("data", f"clearsky_data_{station_no}.parquet"))
+    all_df.to_excel(Path("data", f"clearsky_data_{station_no}.xlsx"))
     # Only run once when data format changes
     # all_df.tail(10000).to_parquet(Path("clearsky", "clearsky_data_sample.parquet"))
     print(all_df)

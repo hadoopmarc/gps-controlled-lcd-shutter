@@ -70,7 +70,10 @@ def build_events(station_no, yearmonth):
 @st.dialog("Sky photograph", width="large", dismissible=False)
 def show_photograph(station_no, skydatetime: datetime):
     assert type(skydatetime) is datetime
-    st.write(skydatetime)
+    with st.container(horizontal=True, gap="large", vertical_alignment="center"):
+        if st.button("Close"):
+            st.rerun()
+        st.write(skydatetime)
     progress_text = "Downloading image..."
     image_progress = st.progress(0, text=progress_text)
 
@@ -80,16 +83,10 @@ def show_photograph(station_no, skydatetime: datetime):
 
     try:
         image_path = get_en_image_path(station_no, skydatetime, update_progress)
-        image = st.image(image_path, width=1024)
+        st.image(image_path, width=896)
     except RemoteImageException:
         st.write("No image available for this date and time")
     image_progress.empty()
-    if st.button("Close"):
-        try:
-            image.empty()
-        except Exception:
-            pass
-        st.rerun()
 
 
 def get_calendar_options(station_no):
