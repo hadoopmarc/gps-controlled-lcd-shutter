@@ -52,10 +52,10 @@ def run(station_no):
     wet_percentages = [x / max(wet_numbers) for x in wet_numbers]
     optimize_df = pd.DataFrame(
         zip(dt_values, clear_percentages, wet_percentages),
-        columns=["deltaT", "clear-line", "wet-line"]
-    ).set_index("deltaT")
-    sns.set_theme(rc={'figure.figsize': (16., 8.)})
-    optiplot = sns.lineplot(data=optimize_df)
+        columns=["deltaTmin", "clear-line", "wet-line"]
+    ).set_index("deltaTmin")
+    sns.set_theme(rc={'figure.figsize': (16., 8.)}, font_scale=2.)
+    optiplot = sns.lineplot(data=optimize_df, linewidth=2.)
     optiplot.get_figure().savefig(Path("data") / "model" / "deltaT_0.png")
     plt.show()
 

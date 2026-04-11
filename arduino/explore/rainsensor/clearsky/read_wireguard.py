@@ -48,7 +48,10 @@ def get_en_image_path(station_no: str, ut_datetime: datetime, callback=None) -> 
 
 def _local_image_path(station_no: str, ut_datetime: datetime) -> Path:
     image_dir = Path("data") / station_no / str(ut_datetime.year)
-    for image_path in sorted(image_dir.glob(f"{str(ut_datetime.date())}*/*.jpg")):
+    folder_date = ut_datetime.date()
+    if ut_datetime.hour < 12:
+        folder_date -= timedelta(days=1)
+    for image_path in sorted(image_dir.glob(f"{str(folder_date)}*/*.jpg")):
         parts = image_path.name.split("_")
         iso_date = parts[2]
         iso_time = parts[3][:8].replace("-", ":")
@@ -61,7 +64,6 @@ def _local_image_path(station_no: str, ut_datetime: datetime) -> Path:
 def _single_image_path(station_no: str, ut_datetime: datetime) -> Path:
     image_dir = Path("data") / station_no / "single"
     for image_path in sorted(image_dir.glob("*.jpg")):
-        print("!!!", image_path)
         iso_date, iso_time = image_path.name[:-4].split("_")
         iso_time = iso_time.replace("-", ":")
         stored_datetime = datetime.fromisoformat(f"{iso_date} {iso_time}")
