@@ -8,5 +8,7 @@ stm32/**
 fp-info-cache
 **/__pycache__
 **/.idea
+**/.vscode
+**/.pio
 **/.streamlit
 **/data
