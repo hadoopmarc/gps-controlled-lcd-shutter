@@ -1,5 +1,5 @@
 """Run as:
- streamlit run streamlit/app.py
+ streamlit run clearsky/app.py 900
 """
 import argparse
 from datetime import datetime, timedelta

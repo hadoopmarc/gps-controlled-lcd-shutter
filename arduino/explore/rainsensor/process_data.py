@@ -39,11 +39,16 @@ def run(station_no):
             ))
             obsdate = datetime.strptime(path.name.split("-")[-1][:6], "%d%m%y")
             dateshift_indices = list(df.loc[df.datetime == "00:00:00"].index)
-            if len(dateshift_indices) == 1:
-                dateshift_index = dateshift_indices[0]
-            else:
-                dateshift_index = len(df)
-            df = df.apply(add_date, obsdate=obsdate, dateshift_index=dateshift_index, axis=1)
+            df["datetime"] = pd.to_timedelta(df["datetime"])
+            df["days"] = pd.cut(
+                df.index,
+                bins=[0] + dateshift_indices + [len(df)],
+                right=False,
+                labels=range(len(dateshift_indices) + 1)
+            ).astype(int)
+            df["days"] = pd.to_timedelta(df["days"], unit="day")
+            df["datetime"] = obsdate + df["datetime"] + df["days"]
+            del df["days"]
             arduino_dfs.append(df)
         print(f"Finished processing {path}")
 
@@ -101,17 +106,6 @@ def run(station_no):
     # Only run once when data format changes
     # all_df.tail(10000).to_parquet(Path("clearsky", "clearsky_data_sample.parquet"))
     print(all_df)
-
-
-def add_date(row, obsdate, dateshift_index):
-    hours, minutes, seconds = row["datetime"].split(":")  # 16:32:00
-    rel_time = timedelta(hours=int(hours), minutes=int(minutes), seconds=int(seconds))
-    if row.name >= dateshift_index:
-        days = 1
-    else:
-        days = 0
-    row["datetime"] = obsdate + timedelta(days=days) + rel_time
-    return row
 
 
 def interpolate_rain(row, dt):

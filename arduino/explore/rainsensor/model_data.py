@@ -1,6 +1,6 @@
 
 import argparse
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from astral import Observer, sun
@@ -10,8 +10,9 @@ import seaborn as sns
 
 # Needs pip install astral, matplotlib, openpyxl, seaborn, PyQt5
 
-en_stations = {
-    915: Observer(52.091, 5.122, 0.0)  # Utrecht
+en_stations = {  # For heights, see https://ahn.nl/ahn-viewer
+    900: Observer(51.919, 6.667, 37.),  # Winterswijk-Woold
+    915: Observer(52.091, 5.122, 1.)  # Utrecht
 }
 
 
