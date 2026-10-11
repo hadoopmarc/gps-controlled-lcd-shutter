@@ -39,6 +39,8 @@ def get_en_image_path(station_no: str, ut_datetime: datetime, callback=None) -> 
             print(f"Image available from single image cache at {image_path}")
         except CachedImageException:
             try:
+                if station_no != 915:
+                    raise RuntimeError("Can only connect to en915 linux computer")
                 image_path = _download_en_image(station_no, ut_datetime, callback)
                 print("Image downloaded from remote server")
             except Exception as e:
